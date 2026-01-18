@@ -12,6 +12,8 @@ from models.tts.vits.vits_inference import VitsInference
 from models.tts.valle.valle_inference import VALLEInference
 from models.tts.naturalspeech2.ns2_inference import NS2Inference
 from models.tts.jets.jets_inference import JetsInference
+from models.tts.tacotron2.tacotron2_inference import Tacotron2Inference
+from models.tts.glowtts.glowtts_inference import GlowTTSInference
 from utils.util import load_config
 import torch
 
@@ -23,6 +25,8 @@ def build_inference(args, cfg):
         "VALLE": VALLEInference,
         "NaturalSpeech2": NS2Inference,
         "Jets": JetsInference,
+        "Tacotron2": Tacotron2Inference,
+        "GlowTTS": GlowTTSInference,
     }
 
     inference_class = supported_inference[cfg.model_type]
@@ -149,6 +153,7 @@ def main():
     parser = build_parser()
     VALLEInference.add_arguments(parser)
     NS2Inference.add_arguments(parser)
+    GlowTTSInference.add_arguments(parser)
     args = parser.parse_args()
     print(args)
 

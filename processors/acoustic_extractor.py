@@ -9,6 +9,7 @@ import numpy as np
 
 import json
 from tqdm import tqdm
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from sklearn.preprocessing import StandardScaler
 from utils.io import save_feature, save_txt, save_torch_audio
 from utils.util import has_existed
@@ -26,28 +27,117 @@ from utils.mel import (
 
 ZERO = 1e-12
 
+def _extract_utt_acoustic_features_by_task(dataset_output, cfg, utt):
+    """Extract acoustic features for a single utterance based on task type
 
-def extract_utt_acoustic_features_parallel(metadata, dataset_output, cfg, n_workers=1):
-    """Extract acoustic features from utterances using muliprocess
+    Args:
+        dataset_output (str): directory to store acoustic features
+        cfg (dict): configuration dictionary
+        utt (dict): utterance metadata
+
+    Raises:
+        ValueError: if task_type is unknown
+    """
+    if cfg.task_type == "tts":
+            extract_utt_acoustic_features_tts(dataset_output, cfg, utt)
+    elif cfg.task_type == "svc":
+            extract_utt_acoustic_features_svc(dataset_output, cfg, utt)
+    elif cfg.task_type == "vocoder":
+            extract_utt_acoustic_features_vocoder(dataset_output, cfg, utt)
+    elif cfg.task_type == "tta":
+            extract_utt_acoustic_features_tta(dataset_output, cfg, utt)
+    else:
+        raise ValueError(f"Unknown task type: {cfg.task_type}")
+
+
+def extract_utt_acoustic_features_serial(metadata, dataset_output, cfg):
+    """Extract acoustic features from utterances (in single process)
 
     Args:
         metadata (dict): dictionary that stores data in train.json and test.json files
         dataset_output (str): directory to store acoustic features
         cfg (dict): dictionary that stores configurations
-        n_workers (int, optional): num of processes to extract features in parallel. Defaults to 1.
 
-    Returns:
-        list: acoustic features
     """
     for utt in tqdm(metadata):
-        if cfg.task_type == "tts":
-            extract_utt_acoustic_features_tts(dataset_output, cfg, utt)
-        if cfg.task_type == "svc":
-            extract_utt_acoustic_features_svc(dataset_output, cfg, utt)
-        if cfg.task_type == "vocoder":
-            extract_utt_acoustic_features_vocoder(dataset_output, cfg, utt)
-        if cfg.task_type == "tta":
-            extract_utt_acoustic_features_tta(dataset_output, cfg, utt)
+        _extract_utt_acoustic_features_by_task(dataset_output, cfg, utt)
+
+def _process_single_utterance(args):
+    """Process a single utterance for acoustic feature extraction
+
+    Args:
+        args (tuple): (utt, dataset_output, cfg)
+
+    Returns:
+        tuple: (success: bool, utt_id: str, error_msg: str or None)
+    """
+    utt, dataset_output, cfg = args
+    utt_id = utt.get('Uid', 'unknown')
+
+    try:
+        _extract_utt_acoustic_features_by_task(dataset_output, cfg, utt)
+        return True, utt_id, None
+    except Exception as e:
+        error_msg = f"Error processing utterance {utt_id}: {str(e)}"
+        return False, utt_id, error_msg
+
+
+def extract_utt_acoustic_features_parallel(metadata, dataset_output, cfg, n_workers=8):
+    """Extract acoustic features from utterances using multi-threading
+
+    This function processes acoustic feature extraction in parallel using multiple threads
+    to speed up the preprocessing pipeline. When n_workers=1, it falls back to
+    single-threaded processing for compatibility.
+
+    Args:
+        metadata (list): list of utterance metadata dictionaries from train.json/test.json
+        dataset_output (str): directory path to store extracted acoustic features
+        cfg (dict): configuration dictionary containing processing parameters
+        n_workers (int, optional): number of worker threads for parallel processing.
+                                  Defaults to 1 (single-threaded).
+
+    Note:
+        - For I/O intensive tasks like audio loading and saving, multi-threading provides
+          good speedup by overlapping I/O operations.
+        - The actual speedup depends on the storage system, CPU cores, and task complexity.
+        - Error handling is built-in: failed utterances are logged but don't stop processing.
+    """
+    if n_workers <= 1:
+        # Fall back to single-threaded processing
+        for utt in tqdm(metadata, desc="Extracting acoustic features"):
+            success, utt_id, error_msg = _process_single_utterance((utt, dataset_output, cfg))
+            if not success:
+                print(error_msg)
+        return
+
+    # Multi-threaded processing
+    print(f"Extracting acoustic features using {n_workers} workers ...")
+
+    # Prepare arguments for each utterance
+    task_args = [(utt, dataset_output, cfg) for utt in metadata]
+
+    # Use ThreadPoolExecutor for parallel processing
+    failed_utterances = []
+    with ThreadPoolExecutor(max_workers=n_workers) as executor:
+        # Submit all tasks
+        future_to_utt = {
+            executor.submit(_process_single_utterance, args): args[0]
+            for args in task_args
+        }
+
+        # Process completed tasks with progress tracking
+        with tqdm(total=len(metadata), desc="Extracting acoustic features") as pbar:
+            for future in as_completed(future_to_utt):
+                success, utt_id, error_msg = future.result()
+                if not success:
+                    print(error_msg)
+                    failed_utterances.append(utt_id)
+                pbar.update(1)
+
+    if failed_utterances:
+        print(f"Warning: {len(failed_utterances)} utterances failed to process: {failed_utterances[:5]}...")
+    else:
+        print("All utterances processed successfully!")
 
 
 def avg_phone_feature(feature, duration, interpolation=False):
@@ -72,26 +162,6 @@ def avg_phone_feature(feature, duration, interpolation=False):
         pos += d
     feature = feature[: len(duration)]
     return feature
-
-
-def extract_utt_acoustic_features_serial(metadata, dataset_output, cfg):
-    """Extract acoustic features from utterances (in single process)
-
-    Args:
-        metadata (dict): dictionary that stores data in train.json and test.json files
-        dataset_output (str): directory to store acoustic features
-        cfg (dict): dictionary that stores configurations
-
-    """
-    for utt in tqdm(metadata):
-        if cfg.task_type == "tts":
-            extract_utt_acoustic_features_tts(dataset_output, cfg, utt)
-        if cfg.task_type == "svc":
-            extract_utt_acoustic_features_svc(dataset_output, cfg, utt)
-        if cfg.task_type == "vocoder":
-            extract_utt_acoustic_features_vocoder(dataset_output, cfg, utt)
-        if cfg.task_type == "tta":
-            extract_utt_acoustic_features_tta(dataset_output, cfg, utt)
 
 
 def __extract_utt_acoustic_features(dataset_output, cfg, utt):

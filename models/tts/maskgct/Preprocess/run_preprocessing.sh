@@ -5,12 +5,12 @@
 
 export HF_ENDPOINT="https://hf-mirror.com"
 export HF_HOME="data/cache/huggingface"
-export CUDA_VISIBLE_DEVICES="1"
+export CUDA_VISIBLE_DEVICES="0,1,2,3"
 set -e  # Exit on any error
 
 ######## Build Experiment Environment ###########
 exp_dir=$(cd `dirname $0`; pwd)
-work_dir=$(dirname $(dirname $(dirname $exp_dir)))
+work_dir=$(dirname $(dirname $(dirname $(dirname $exp_dir))))
 
 export WORK_DIR=$work_dir
 export PYTHONPATH=$work_dir
@@ -20,8 +20,8 @@ echo "=== MaskGCT Semantic Feature Preprocessing ==="
 
 # Set paths
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CONFIG_FILE="$PROJECT_ROOT/egs/tts/MaskGCT/preprocess_semantic_features.json"
-SCRIPT_DIR="$PROJECT_ROOT/models/tts/maskgct"
+CONFIG_FILE="$PROJECT_ROOT/models/tts/maskgct/Preprocess/preprocess_config.json"
+SCRIPT_DIR="$PROJECT_ROOT/models/tts/maskgct/Preprocess"
 
 # Check if config file exists
 if [ ! -f "$CONFIG_FILE" ]; then
@@ -63,7 +63,7 @@ run_preprocessing() {
 echo "Starting semantic feature preprocessing..."
 
 run_preprocessing "ljspeech"
-# run_preprocessing "libritts"
+run_preprocessing "libritts"
 
 echo ""
 echo "=== All preprocessing tasks completed! ==="

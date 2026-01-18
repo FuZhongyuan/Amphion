@@ -46,8 +46,11 @@ def extract_acoustic_features(dataset, output_path, cfg, dataset_types, n_worker
         # acoustic_extractor.extract_utt_acoustic_features_parallel(
         #     metadata, dataset_output, cfg, n_workers=n_workers
         # )
-    acoustic_extractor.extract_utt_acoustic_features_serial(
-        metadata, dataset_output, cfg
+    # acoustic_extractor.extract_utt_acoustic_features_serial(
+    #     metadata, dataset_output, cfg
+    # )
+    acoustic_extractor.extract_utt_acoustic_features_parallel(
+        metadata, dataset_output, cfg, n_workers=n_workers
     )
 
 
@@ -157,7 +160,7 @@ def preprocess(cfg, args):
         if (
             "pitch_shift" in dataset
             or "formant_shift" in dataset
-            or "equalizer" in dataset in dataset
+            or "equalizer" in dataset
         ):
             continue
         print(

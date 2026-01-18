@@ -5,12 +5,15 @@
 
 import logging
 import numpy as np
-import librosa
 import torch
+import torchaudio
 import os
+import h5py
+import json
 from torch.nn.utils.rnn import pad_sequence
 
 from models.base.ljspeech_dataset import LJSpeechDataset, WarningFilter
+from utils.mel import extract_mel_features
 
 
 filter = WarningFilter()
@@ -22,8 +25,8 @@ logger = logging.getLogger(__name__)
 
 
 class MaskgctLJSpeechDataset(LJSpeechDataset):
-    def __init__(self, cfg):
-        super(MaskgctLJSpeechDataset, self).__init__(cfg=cfg)
+    def __init__(self, cfg, is_valid=False):
+        super(MaskgctLJSpeechDataset, self).__init__(cfg=cfg, is_valid=is_valid)
 
         self.sample_rate = self.cfg.preprocess.sample_rate
 
@@ -38,6 +41,19 @@ class MaskgctLJSpeechDataset(LJSpeechDataset):
             self.cfg.preprocess, "load_semantic_features", False
         )
         self.load_chromagram = getattr(self.cfg.preprocess, "load_chromagram", False)
+        self.load_mel_spectrogram = getattr(
+            self.cfg.preprocess, "load_mel_spectrogram", False
+        )
+
+        # Semantic feature caching configuration
+        self.use_semantic_cache = getattr(self.cfg.preprocess, "use_semantic_cache", False)
+        self.processed_dir = getattr(self.cfg.preprocess, "processed_dir", "")
+        
+        # HDF5 cache index
+        self.hdf5_index = {}
+        self.hdf5_files = {}  # Cache for opened HDF5 files
+        if self.use_semantic_cache and self.processed_dir:
+            self._load_hdf5_index()
 
         if self.load_semantic_features:
             from transformers import SeamlessM4TFeatureExtractor
@@ -45,6 +61,36 @@ class MaskgctLJSpeechDataset(LJSpeechDataset):
             self.semantic_model_processor = SeamlessM4TFeatureExtractor.from_pretrained(
                 "facebook/w2v-bert-2.0"
             )
+    
+    def _load_hdf5_index(self):
+        """Load HDF5 index for fast lookup."""
+        index_path = os.path.join(self.processed_dir, "hdf5_index.json")
+        if os.path.exists(index_path):
+            try:
+                with open(index_path, 'r') as f:
+                    data = json.load(f)
+                    self.hdf5_index = data.get("sample_index", {})
+                logger.info(f"Loaded HDF5 index with {len(self.hdf5_index)} samples")
+            except Exception as e:
+                logger.warning(f"Failed to load HDF5 index: {e}")
+    
+    def _get_hdf5_file(self, file_idx: int):
+        """Get HDF5 file handle (with caching)."""
+        if file_idx not in self.hdf5_files:
+            hdf5_path = os.path.join(self.processed_dir, f"features_{file_idx:05d}.h5")
+            if os.path.exists(hdf5_path):
+                self.hdf5_files[file_idx] = h5py.File(hdf5_path, 'r')
+            else:
+                return None
+        return self.hdf5_files[file_idx]
+    
+    def __del__(self):
+        """Close all HDF5 files."""
+        for f in self.hdf5_files.values():
+            try:
+                f.close()
+            except:
+                pass
 
     def g2p(self, text, language):
         from models.tts.maskgct.g2p.g2p_generation import g2p, chn_eng_g2p
@@ -54,46 +100,94 @@ class MaskgctLJSpeechDataset(LJSpeechDataset):
         else:
             return g2p(text, sentence=None, language=language)
 
+    def load_cached_semantic_features(self, wav_path):
+        """Load preprocessed semantic features from HDF5 cache if available."""
+        if not self.use_semantic_cache or not self.processed_dir:
+            return None
+
+        try:
+            # Convert wav path to sample key
+            # For LJSpeech: data_root/wavs/LJ001-0001.wav -> LJ001-0001
+            sample_key = os.path.splitext(os.path.basename(wav_path))[0]
+            
+            # Look up in HDF5 index
+            if sample_key not in self.hdf5_index:
+                return None
+            
+            index_info = self.hdf5_index[sample_key]
+            file_idx = index_info["file_idx"]
+            group_name = index_info["group_name"]
+            
+            # Get HDF5 file
+            hdf5_file = self._get_hdf5_file(file_idx)
+            if hdf5_file is None or group_name not in hdf5_file:
+                return None
+            
+            group = hdf5_file[group_name]
+            cached_data = {}
+            
+            # Load hidden states if available
+            if "hidden_states" in group:
+                # NOTE: cached features may be stored as float16; cast to float32 for training stability
+                cached_data["semantic_hidden_states"] = group["hidden_states"][:].astype(
+                    np.float32, copy=False
+                )
+            
+            # Load mel spectrogram if available and requested
+            if self.load_mel_spectrogram and "mel_spectrogram" in group:
+                # NOTE: cached features may be stored as float16; cast to float32 for training stability
+                cached_data["mel_spectrogram"] = group["mel_spectrogram"][:].astype(
+                    np.float32, copy=False
+                )
+            
+            return cached_data if cached_data else None
+            
+        except Exception as e:
+            logger.warning(f"Failed to load cached features for {wav_path}: {e}")
+
+        return None
+
     def __getitem__(self, idx):
         wav_path = self.wav_paths[idx]
-        file_bytes = None
-        try:
-            full_wav_path = os.path.join(self.data_root, wav_path)
-            file_bytes = full_wav_path
-        except:
-            logger.info(f"Get data from {wav_path} failed. Get another.")
+        full_wav_path = os.path.join(self.data_root, wav_path)
+
+        # Skip known error files
+        if wav_path in self.error_files or full_wav_path in self.error_files:
             position = np.where(self.num_frame_indices == idx)[0][0]
             random_index = np.random.choice(self.num_frame_indices[:position])
-            del position
             return self.__getitem__(random_index)
 
         meta = self.get_meta_from_wav_path(wav_path)
-        if file_bytes is not None and meta is not None:
-            buffer = file_bytes
-            try:
-                speech, _ = librosa.load(buffer, sr=self.sample_rate)
-
-                if len(speech) > self.duration_setting["max"] * self.sample_rate:
-                    position = np.where(self.num_frame_indices == idx)[0][0]
-                    random_index = np.random.choice(self.num_frame_indices[:position])
-                    del position
-                    return self.__getitem__(random_index)
-            except:
-                logger.info(f"Failed to load file {buffer}. Get another.")
-                position = np.where(self.num_frame_indices == idx)[0][0]
-                random_index = np.random.choice(self.num_frame_indices[:position])
-                del position
-                return self.__getitem__(random_index)
+        if meta is not None:
+            # Try loading audio with retries
+            speech = None
+            for attempt in range(self.max_retries):
+                try:
+                    speech, _ = self._load_audio_with_torchaudio(
+                        full_wav_path, target_sr=self.sample_rate
+                    )
+                    if len(speech) > self.duration_setting["max"] * self.sample_rate:
+                        position = np.where(self.num_frame_indices == idx)[0][0]
+                        random_index = np.random.choice(self.num_frame_indices[:position])
+                        return self.__getitem__(random_index)
+                    break
+                except Exception as e:
+                    if attempt == self.max_retries - 1:
+                        logger.warning(f"Failed to load {full_wav_path} after {self.max_retries} attempts: {e}")
+                        self._save_error_file(wav_path)
+                        position = np.where(self.num_frame_indices == idx)[0][0]
+                        random_index = np.random.choice(self.num_frame_indices[:position])
+                        return self.__getitem__(random_index)
 
             single_feature = dict()
 
             # pad the speech to the multiple of hop_size
+            vocos_hop_size = getattr(self.cfg.preprocess, "hop_size", 320)
             speech = np.pad(
                 speech,
                 (
                     0,
-                    self.cfg.preprocess.hop_size
-                    - len(speech) % self.cfg.preprocess.hop_size,
+                    vocos_hop_size - len(speech) % vocos_hop_size,
                 ),
                 mode="constant",
             )
@@ -102,9 +196,10 @@ class MaskgctLJSpeechDataset(LJSpeechDataset):
             for tgt_sr in self.all_sample_rates:
                 if tgt_sr != self.sample_rate:
                     assert tgt_sr < self.sample_rate
-                    tgt_speech = librosa.resample(
-                        speech, orig_sr=self.sample_rate, target_sr=tgt_sr
-                    )
+                    speech_tensor = torch.from_numpy(speech).float()
+                    tgt_speech = torchaudio.functional.resample(
+                        speech_tensor, self.sample_rate, tgt_sr
+                    ).numpy()
                 else:
                     tgt_speech = speech
                 single_feature.update(
@@ -116,7 +211,7 @@ class MaskgctLJSpeechDataset(LJSpeechDataset):
 
             # [Note] Mask is (n_frames,) but not (T,)
             speech_frames = len(speech) // self.cfg.preprocess.hop_size
-            mask = np.ones(speech_frames)
+            mask = np.ones(speech_frames, dtype=np.float32)
 
             single_feature.update(
                 {
@@ -127,18 +222,37 @@ class MaskgctLJSpeechDataset(LJSpeechDataset):
             )
 
             ## Load Semantic Model Input Features ##
-            if self.load_semantic_features:
-                speech_16k = single_feature["wav_16000"]
-                inputs = self.semantic_model_processor(speech_16k, sampling_rate=16000)
-                input_features = inputs["input_features"][0]
-                attention_mask = inputs["attention_mask"][0]
+            if self.load_semantic_features or self.load_mel_spectrogram:
+                # Try to load from cache first
+                cached_features = self.load_cached_semantic_features(full_wav_path)
+                if cached_features is not None:
+                    single_feature.update(cached_features)
+                else:
+                    # Fallback to real-time extraction
+                    logger.debug(f"Cache miss for {full_wav_path}, extracting features in real-time")
 
-                single_feature.update(
-                    {
-                        "semantic_model_input_features": input_features,
-                        "semantic_model_attention_mask": attention_mask,
-                    }
-                )
+                    # Extract semantic features if needed
+                    if self.load_semantic_features:
+                        speech_16k = single_feature["wav_16000"]
+                        inputs = self.semantic_model_processor(speech_16k, sampling_rate=16000)
+                        input_features = inputs["input_features"][0]
+                        attention_mask = inputs["attention_mask"][0]
+
+                        single_feature.update(
+                            {
+                                "semantic_model_input_features": input_features,
+                                "semantic_model_attention_mask": attention_mask,
+                            }
+                        )
+
+                    # Extract mel spectrogram if needed
+                    if self.load_mel_spectrogram:
+                        mel_spectrogram = extract_mel_features(
+                            torch.tensor(speech).unsqueeze(0), self.cfg.preprocess, center=False
+                        )
+                        # mel shape: (1, n_mel, n_frames) -> (1, n_frames, n_mel)
+                        mel_spectrogram = mel_spectrogram.squeeze(0).transpose(0, 1)
+                        single_feature["mel_spectrogram"] = mel_spectrogram
 
             if self.load_wav_path:
                 single_feature.update({"wav_path": full_wav_path})
@@ -179,16 +293,15 @@ class MaskgctLJSpeechDataset(LJSpeechDataset):
                 return self.__getitem__(random_index)
 
             phone_id = torch.tensor(np.array(phone_id), dtype=torch.long)
-            phone_mask = np.ones(len(phone_id))
+            phone_mask = np.ones(len(phone_id), dtype=np.float32)
 
             single_feature.update({"phone_id": phone_id, "phone_mask": phone_mask})
             return single_feature
 
         else:
-            logger.info("Failed to get file after retries.")
+            logger.info("Failed to get metadata.")
             position = np.where(self.num_frame_indices == idx)[0][0]
             random_index = np.random.choice(self.num_frame_indices[:position])
-            del position
             return self.__getitem__(random_index)
 
 
@@ -234,6 +347,13 @@ class MaskgctLJSpeechCollator:
                 )
             elif key == "wav_path":
                 packed_batch_features[key] = [b[key] for b in batch]
+            elif key == "mel_spectrogram":
+                # mel_spectrogram has shape (1, T, D), remove batch dim before padding
+                packed_batch_features[key] = pad_sequence(
+                    [torch.as_tensor(b[key]).squeeze(0) for b in batch],  # Remove batch dim
+                    batch_first=True,
+                    padding_value=0.0,
+                )
             else:
                 packed_batch_features[key] = pad_sequence(
                     [torch.as_tensor(b[key]) for b in batch],

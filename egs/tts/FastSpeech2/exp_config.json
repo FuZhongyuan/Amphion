@@ -6,17 +6,17 @@
   ],
   "dataset_path": {
     // TODO: Fill in your dataset path
-    "LJSpeech": "[LJSpeech dataset path]"
+    "LJSpeech": "data/LJSpeech-1.1"
   },
   // TODO: Fill in the output log path. The default value is "Amphion/ckpts/tts"
-  "log_dir": "ckpts/tts",
+  "log_dir": "ckpts/fastspeech2",
   "preprocess": {
     // TODO: Fill in the output data path. The default value is "Amphion/data"
-    "processed_dir": "data",
-    "sample_rate": 22050,
+    "processed_dir": "data/processed/ljspeech_processed",
+    "sample_rate": 22050
   },
   "train": {
-    "batch_size": 16,
-    "max_epoch": 100,
+    "batch_size": 32,
+    "max_epoch": 500
   }
 }

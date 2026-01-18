@@ -115,7 +115,7 @@ def preprocess(cfg, args):
         if (
             "pitch_shift" in dataset
             or "formant_shift" in dataset
-            or "equalizer" in dataset in dataset
+            or "equalizer" in dataset
         ):
             continue
         print(

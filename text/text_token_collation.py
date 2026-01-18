@@ -116,8 +116,10 @@ class phoneIDCollation:
 
     def get_phone_id_sequence(self, cfg, phones_seq):
         if cfg.preprocess.phone_extractor == "lexicon":
-            phones_seq = " ".join(phones_seq)
-            sequence = text_to_sequence(phones_seq, cfg.preprocess.text_cleaners)
+            # Wrap phones in curly braces for ARPAbet processing
+            # This tells text_to_sequence to treat space-separated tokens as ARPAbet symbols
+            phones_str = "{" + " ".join(phones_seq) + "}"
+            sequence = text_to_sequence(phones_str, cfg.preprocess.text_cleaners)
         else:
             sequence, seq_len = self.text_token_colloator(phones_seq)
         return sequence

@@ -64,3 +64,6 @@ conversion_results
 get_available_gpu.py
 
 *.safetensors
+
+glow-tts-ref/
+tacotron2-ref/

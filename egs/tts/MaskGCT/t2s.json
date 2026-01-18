@@ -4,18 +4,20 @@
         "libritts": 1.0
     },
     "preprocess": {
-        "dataset_type": "libritts",
-        "libritts_data_root": "/mnt/storage/fuzhongyuan_space/fzy_project/Amphion/data/LibriTTS",
-        "libritts_cache_path": "/mnt/storage/fuzhongyuan_space/fzy_project/Amphion/data/LibriTTSCache",
+        "dataset_type": "ljspeech",
+        "ljspeech_data_root": "data/LJSpeech-1.1",
+        "ljspeech_cache_path": "data/LJSpeechCache",
         "hop_size": 320,
         "sample_rate": 16000,
         "max_length": 128000,
         "random_crop": true,
-        "processed_dir": "",
+        "processed_dir": "data/processed_maskgct/ljspeech",
         "valid_file": "valid.json",
         "train_file": "train.json",
         "load_phone": true,
-        "load_semantic_features": true
+        "load_semantic_features": true,
+        "load_mel_spectrogram": false,
+        "use_semantic_cache": true
     },
     "model": {
         "t2s_model": {
@@ -25,7 +27,11 @@
             "cfg_scale": 0.15,
             "cond_codebook_size": 8192,
             "cond_dim": 1024,
-            "use_phone_cond": true
+            "use_phone_cond": true,
+            "gradient_checkpointing": true,
+            "target_only_ratio": 0.5,
+            "min_prompt_ratio": 0.1,
+            "max_prompt_ratio": 0.5
         },
         "semantic_codec": {
             "codebook_size": 8192,
@@ -34,7 +40,7 @@
             "vocos_dim": 384,
             "vocos_intermediate_dim": 2048,
             "vocos_num_layers": 12,
-            "pretrained_path": "ckpts/maskgct/semantic_codec/checkpoint/epoch-XXXX_step-XXXXXXX_loss-X.XXXXXX/pytorch_model.bin",
+            "pretrained_path": "ckpts/MaskGCT-ckpt/semantic_codec/model.safetensors",
             "representation_stat_mean_var_path": "models/tts/maskgct/ckpt/wav2vec2bert_stats.pt"
         },
         "representation_type": "w2v-bert-2.0",
@@ -44,11 +50,11 @@
     "log_dir": "ckpts/maskgct",
     "train": {
         "max_epoch": 0,
-        "use_dynamic_batchsize": false,
+        "use_dynamic_batchsize": true,
         "max_tokens": 16000000,
         "max_sentences": 200,
-        "lr_warmup_steps": 10000,
-        "lr_scheduler": "constant",
+        "lr_warmup_steps": 5000,
+        "lr_scheduler": "inverse_sqrt",
         "num_train_steps": 100000,
         "adam": {
             "lr": 1e-4,
@@ -67,11 +73,12 @@
         "gradient_accumulation_step": 1,
         "tracker": ["tensorboard"],
         "save_checkpoint_stride": [1],
-        "keep_last": [10],
+        "keep_last": [5],
         "run_eval": [true],
         "dataloader": {
-            "num_worker": 16,
-            "pin_memory": true
+            "num_worker": 8,
+            "pin_memory": true,
+            "prefetch_factor": 4
         }
     }
 }

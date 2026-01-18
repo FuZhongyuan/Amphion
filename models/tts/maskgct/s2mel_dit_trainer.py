@@ -170,8 +170,6 @@ class S2MelDiTTrainer(BaseTrainer):
         else:
             x_mask = x_mask[:, :target_len]
 
-        torch.cuda.empty_cache()
-
         noise, noise_pred, final_mask, prompt_len = self.model(
             x=mel,
             x_mask=x_mask,
@@ -230,7 +228,7 @@ class S2MelDiTTrainer(BaseTrainer):
         else:
             x_mask = x_mask[:, :target_len]
 
-        torch.cuda.empty_cache()
+        # torch.cuda.empty_cache()
 
         with torch.no_grad():
             noise, noise_pred, final_mask, prompt_len = self.model(

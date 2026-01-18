@@ -5,3 +5,4 @@
 
 # from .tts_inferece import TTSInference
 from .tts_trainer import TTSTrainer
+from .dataset_factory import get_maskgct_dataset_class

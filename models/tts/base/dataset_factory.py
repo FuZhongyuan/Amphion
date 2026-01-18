@@ -8,7 +8,7 @@ Dataset factory for Maskgct models.
 Supports multiple datasets: emilia, ljspeech, libritts, etc.
 """
 
-from models.tts.base.maskgct_emilia_dataset import MaskgctEmiliaDataset, MaskgctCollator
+# from models.tts.base.maskgct_emilia_dataset import MaskgctEmiliaDataset, MaskgctCollator
 from models.tts.base.maskgct_ljspeech_dataset import MaskgctLJSpeechDataset, MaskgctLJSpeechCollator
 from models.tts.base.maskgct_libritts_dataset import MaskgctLibriTTSDataset, MaskgctLibriTTSCollator
 

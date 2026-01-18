@@ -1,46 +1,40 @@
 {
     "model_type": "S2MelFM",
     "dataset": {
-        "ljspeech": 1.0
+        "libritts": 1.0
     },
     "preprocess": {
-        "dataset_type": "ljspeech",
-        "ljspeech_data_root": "data/LJSpeech-1.1",
-        "ljspeech_cache_path": "data/LJSpeechCache",
+        "dataset_type": "libritts",
+        "libritts_data_root": "data/LibriTTS",
+        "libritts_cache_path": "data/LibriTTSCache",
         "hop_size": 320,
         "sample_rate": 16000,
         "n_fft": 1024,
+        "num_mels": 80,
         "win_size": 1024,
-        "n_mel": 80,
-        "num_mels": 100,
         "fmin": 0,
         "fmax": 8000,
         "mel_mean": 0.0,
         "mel_var": 1.0,
-        "max_length": 48000,
+        "max_length": 128000,
         "random_crop": true,
-        "processed_dir": "data/processed_maskgct/ljspeech",
+        "processed_dir": "data/processed_maskgct/libritts",
         "valid_file": "valid.json",
         "train_file": "train.json",
         "load_semantic_features": true,
         "load_mel_spectrogram": true,
-        "use_semantic_cache": true,
-        "use_validation": true,
-        "valid_split_ratio": 0.05
+        "use_semantic_cache": true
     },
     "model": {
         "s2mel_fm": {
             "mel_dim": 80,
-            "hidden_size": 512,
+            "hidden_size": 768,
             "num_layers": 12,
-            "num_heads": 8,
+            "num_heads": 12,
             "semantic_codebook_size": 512,
-            "cfg_scale": 0.2,
+            "cfg_scale": 0.15,
             "sigma": 1e-5,
-            "time_scheduler": "linear",
-            "min_prompt_ratio": 0.1,
-            "max_prompt_ratio": 0.5,
-            "use_prompt_model": true,
+            "time_scheduler": "cos",
             "gradient_checkpointing": false
         },
         "semantic_codec": {
@@ -60,14 +54,14 @@
     "log_dir": "ckpts/maskgct_mini",
     "train": {
         "max_epoch": 0,
-        "use_dynamic_batchsize": false,
-        "max_tokens": 8000000,
+        "use_dynamic_batchsize": true,
+        "max_tokens": 8000,
         "max_sentences": 50,
         "lr_warmup_steps": 5000,
         "lr_scheduler": "inverse_sqrt",
         "num_train_steps": 100000,
         "adam": {
-            "lr": 1e-4,
+            "lr": 5e-5,
             "betas": [0.9, 0.98],
             "weight_decay": 0.01
         },
@@ -87,9 +81,9 @@
         "keep_last": [5],
         "run_eval": [true],
         "dataloader": {
-            "num_worker": 8,
-            "pin_memory": true,
-            "prefetch_factor": 4
+            "num_worker": 16,
+            "pin_memory": false,
+            "prefetch_factor": 2
         }
     }
 }

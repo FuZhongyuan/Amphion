@@ -134,6 +134,9 @@ class BaseTrainer:
         self.max_epoch = (
             self.cfg.train.max_epoch if self.cfg.train.max_epoch > 0 else float("inf")
         )
+
+        # Calculate steps per epoch for progress display (will be updated after dataloader creation)
+        self.steps_per_epoch = 0
         if self.accelerator.is_main_process:
             self.logger.info(
                 "Max epoch: {}".format(
@@ -212,6 +215,9 @@ class BaseTrainer:
             self.train_dataloader = self.accelerator.prepare(
                 self.train_dataloader,
             )
+
+        # Calculate steps per epoch for progress display (after accelerator prepare)
+        self.steps_per_epoch = len(self.train_dataloader) // self.cfg.train.gradient_accumulation_step
 
         if isinstance(self.model, dict):
             for key in self.model.keys():
@@ -368,6 +374,7 @@ class BaseTrainer:
             project_dir=self.exp_dir,
             logging_dir=os.path.join(self.exp_dir, "log"),
         )
+        # from accelerate import DistributedDataParallelKwargs
         # ddp_kwargs = DistributedDataParallelKwargs(find_unused_parameters=True)
         self.accelerator = accelerate.Accelerator(
             gradient_accumulation_steps=self.cfg.train.gradient_accumulation_step,
@@ -378,8 +385,14 @@ class BaseTrainer:
         if self.accelerator.is_main_process:
             os.makedirs(project_config.project_dir, exist_ok=True)
             os.makedirs(project_config.logging_dir, exist_ok=True)
+        # IMPORTANT:
+        # Only initialize trackers on the main process. Initializing (e.g. TensorBoard)
+        # trackers on every distributed process can create multiple event writer queues
+        # and lead to steadily increasing host RAM usage in multi-GPU runs.
         with self.accelerator.main_process_first():
-            self.accelerator.init_trackers(self.args.exp_name)
+            if self.accelerator.is_main_process:
+                self.accelerator.init_trackers(self.args.exp_name)
+        self.accelerator.wait_for_everyone()
 
     def _build_model(self):
         raise NotImplementedError
@@ -401,14 +414,14 @@ class BaseTrainer:
             )
             
             if use_factory_pattern:
-                train_dataset = Dataset(cfg=self.cfg)
+                train_dataset = Dataset(cfg=self.cfg, is_valid=False)
             else:
                 # Legacy pattern: assume dataset is a list
                 if isinstance(self.cfg.dataset, (list, tuple)):
                     train_dataset = Dataset(cfg=self.cfg, dataset=self.cfg.dataset[0], is_valid=False)
                 else:
                     # If dataset is dict, try to use first key or use factory pattern
-                    train_dataset = Dataset(cfg=self.cfg)
+                    train_dataset = Dataset(cfg=self.cfg, is_valid=False)
             train_collate = Collator(self.cfg)
 
             t = time.time()
@@ -453,11 +466,43 @@ class BaseTrainer:
                     batches, drop_last=False, use_random_sampler=True
                 ),
                 pin_memory=self.cfg.train.dataloader.pin_memory,
-                prefetch_factor=32,
+                prefetch_factor=self.cfg.train.dataloader.prefetch_factor
             )
             self.accelerator.wait_for_everyone()
 
+            # Build validation dataloader
             valid_loader = None
+            # Check if validation is enabled in config (default: True)
+            use_validation = getattr(self.cfg.preprocess, "use_validation", True)
+            
+            if use_factory_pattern and use_validation:
+                try:
+                    if self.accelerator.is_main_process:
+                        print("Building validation dataset...")
+                    valid_dataset = Dataset(cfg=self.cfg, is_valid=True)
+                    valid_collate = Collator(self.cfg)
+                    
+                    if len(valid_dataset) > 0:
+                        valid_loader = DataLoader(
+                            valid_dataset,
+                            collate_fn=valid_collate,
+                            batch_size=self.cfg.train.batch_size,
+                            num_workers=self.cfg.train.dataloader.num_worker,
+                            pin_memory=self.cfg.train.dataloader.pin_memory,
+                            shuffle=False,
+                        )
+                        if self.accelerator.is_main_process:
+                            print(f"Validation dataset built successfully with {len(valid_dataset)} samples")
+                    else:
+                        if self.accelerator.is_main_process:
+                            print("Warning: Validation dataset is empty, skipping validation")
+                except Exception as e:
+                    if self.accelerator.is_main_process:
+                        print(f"Warning: Failed to build validation dataset: {e}")
+                        import traceback
+                        traceback.print_exc()
+            elif not use_validation and self.accelerator.is_main_process:
+                print("Validation is disabled in config (use_validation=false)")
 
         else:
             print("Use Normal Batchsize......")
@@ -472,14 +517,14 @@ class BaseTrainer:
             )
             
             if use_factory_pattern:
-                train_dataset = Dataset(cfg=self.cfg)
+                train_dataset = Dataset(cfg=self.cfg, is_valid=False)
             else:
                 # Legacy pattern: assume dataset is a list
                 if isinstance(self.cfg.dataset, (list, tuple)):
                     train_dataset = Dataset(self.cfg, self.cfg.dataset[0], is_valid=False)
                 else:
                     # If dataset is dict, try to use first key or use factory pattern
-                    train_dataset = Dataset(cfg=self.cfg)
+                    train_dataset = Dataset(cfg=self.cfg, is_valid=False)
             train_collate = Collator(self.cfg)
 
             train_loader = DataLoader(
@@ -491,7 +536,40 @@ class BaseTrainer:
                 pin_memory=self.cfg.train.dataloader.pin_memory,
             )
 
+            # Build validation dataloader
             valid_loader = None
+            # Check if validation is enabled in config (default: True)
+            use_validation = getattr(self.cfg.preprocess, "use_validation", True)
+            
+            if use_factory_pattern and use_validation:
+                try:
+                    if self.accelerator.is_main_process:
+                        print("Building validation dataset...")
+                    valid_dataset = Dataset(cfg=self.cfg, is_valid=True)
+                    valid_collate = Collator(self.cfg)
+                    
+                    if len(valid_dataset) > 0:
+                        valid_loader = DataLoader(
+                            valid_dataset,
+                            collate_fn=valid_collate,
+                            batch_size=self.cfg.train.batch_size,
+                            num_workers=self.cfg.train.dataloader.num_worker,
+                            pin_memory=self.cfg.train.dataloader.pin_memory,
+                            shuffle=False,
+                        )
+                        if self.accelerator.is_main_process:
+                            print(f"Validation dataset built successfully with {len(valid_dataset)} samples")
+                    else:
+                        if self.accelerator.is_main_process:
+                            print("Warning: Validation dataset is empty, skipping validation")
+                except Exception as e:
+                    if self.accelerator.is_main_process:
+                        print(f"Warning: Failed to build validation dataset: {e}")
+                        import traceback
+                        traceback.print_exc()
+            elif not use_validation and self.accelerator.is_main_process:
+                print("Validation is disabled in config (use_validation=false)")
+            
             self.accelerator.wait_for_everyone()
 
         return train_loader, valid_loader
@@ -609,6 +687,9 @@ class BaseTrainer:
                 if isinstance(v, torch.Tensor):
                     batch[k] = v.to(device)
 
+            # Record step start time for performance monitoring (after data loading)
+            step_start_time = time.time()
+
             # Do training step and BP
             with self.accelerator.accumulate(self.model):
                 total_loss, train_losses, training_stats = self._train_step(batch)
@@ -624,10 +705,61 @@ class BaseTrainer:
                 for key, value in train_losses.items():
                     epoch_losses[key] = value
 
-                if isinstance(train_losses, dict):
+                if self.accelerator.is_main_process and isinstance(train_losses, dict):
                     for key, loss in train_losses.items():
                         self.accelerator.log(
                             {"Steps/Train {}".format(key): loss},
+                            step=self.step,
+                        )
+
+                # Log learning rate(s)
+                if self.accelerator.is_main_process:
+                    if isinstance(self.optimizer, dict):
+                        for key in self.optimizer.keys():
+                            lr = self.optimizer[key].param_groups[0]["lr"]
+                            self.accelerator.log(
+                                {"Steps/LR_{}".format(key): lr},
+                                step=self.step,
+                            )
+                    else:
+                        lr = self.optimizer.param_groups[0]["lr"]
+                        self.accelerator.log(
+                            {"Steps/LR": lr},
+                            step=self.step,
+                        )
+
+                # Log gradient norm
+                if self.accelerator.sync_gradients:
+                    if self.accelerator.is_main_process:
+                        if isinstance(self.model, dict):
+                            for key in self.model.keys():
+                                total_norm = 0.0
+                                for p in self.model[key].parameters():
+                                    if p.grad is not None:
+                                        param_norm = p.grad.data.norm(2)
+                                        total_norm += param_norm.item() ** 2
+                                total_norm = total_norm**0.5
+                                self.accelerator.log(
+                                    {"Steps/GradNorm_{}".format(key): total_norm},
+                                    step=self.step,
+                                )
+                        else:
+                            total_norm = 0.0
+                            for p in self.model.parameters():
+                                if p.grad is not None:
+                                    param_norm = p.grad.data.norm(2)
+                                    total_norm += param_norm.item() ** 2
+                            total_norm = total_norm**0.5
+                            self.accelerator.log(
+                                {"Steps/GradNorm": total_norm},
+                                step=self.step,
+                            )
+
+                # Log training stats if available
+                if self.accelerator.is_main_process and isinstance(training_stats, dict):
+                    for key, value in training_stats.items():
+                        self.accelerator.log(
+                            {"Steps/Stats_{}".format(key): value},
                             step=self.step,
                         )
 
@@ -641,6 +773,22 @@ class BaseTrainer:
 
                 self.step += 1
                 epoch_step += 1
+
+                # Record step time for performance monitoring
+                step_time = time.time() - step_start_time
+                self.time_window.append(step_time)
+                
+                # Log performance metrics
+                if self.accelerator.is_main_process:
+                    self.accelerator.log(
+                        {"Steps/StepTime": step_time},
+                        step=self.step,
+                    )
+                    if len(self.time_window._values) > 0:
+                        self.accelerator.log(
+                            {"Steps/AvgStepTime": self.time_window.average},
+                            step=self.step,
+                        )
 
                 if self.step % self.cfg.train.save_checkpoints_steps == 0:
                     self.save_checkpoint()
@@ -676,7 +824,7 @@ class BaseTrainer:
             )
             path = os.path.join(self.checkpoint_dir, checkpoint_filename)
             self.logger.info("Saving state to {}...".format(path))
-            self.accelerator.save_state(path, safe_serialization=True)
+            self.accelerator.save_state(path, safe_serialization=False)
             self.logger.info("Finished saving state.")
 
             if (
@@ -707,8 +855,11 @@ class BaseTrainer:
         while self.epoch < self.max_epoch:
             if self.accelerator.is_main_process:
                 self.logger.info("\n")
-                self.logger.info("-" * 32)
-                self.logger.info("Epoch {}: ".format(self.epoch))
+                self.logger.info("-" * 50)
+                max_epoch_display = "∞" if self.max_epoch == float("inf") else str(int(self.max_epoch))
+                self.logger.info("Epoch {}/{} (Steps per epoch: {}): ".format(
+                    self.epoch + 1, max_epoch_display, self.steps_per_epoch
+                ))
 
             # Do training & validating epoch
             train_total_loss, train_losses = self._train_epoch()
@@ -716,31 +867,38 @@ class BaseTrainer:
                 for key, loss in train_losses.items():
                     if self.accelerator.is_main_process:
                         self.logger.info("  |- Train/{} Loss: {:.6f}".format(key, loss))
-                    self.accelerator.log(
-                        {"Epoch/Train {} Loss".format(key): loss},
-                        step=self.epoch,
-                    )
+                    if self.accelerator.is_main_process:
+                        self.accelerator.log(
+                            {"Epoch/Train {} Loss".format(key): loss},
+                            step=self.epoch,
+                        )
 
-            valid_total_loss, valid_losses = 0.0, 0.0
-            # if isinstance(valid_losses, dict):
-            #     for key, loss in valid_losses.items():
-            #         if self.accelerator.is_main_process:
-            #             self.logger.info("  |- Valid/{} Loss: {:.6f}".format(key, loss))
-            #         self.accelerator.log(
-            #             {"Epoch/Train {} Loss".format(key): loss},
-            #             step=self.epoch,
-            #         )
+            # Run validation if valid_dataloader exists
+            if self.valid_dataloader is not None:
+                valid_total_loss, valid_losses = self._valid_epoch()
+                if isinstance(valid_losses, dict):
+                    for key, loss in valid_losses.items():
+                        if self.accelerator.is_main_process:
+                            self.logger.info("  |- Valid/{} Loss: {:.6f}".format(key, loss))
+                        if self.accelerator.is_main_process:
+                            self.accelerator.log(
+                                {"Epoch/Valid {} Loss".format(key): loss},
+                                step=self.epoch,
+                            )
+            else:
+                valid_total_loss, valid_losses = 0.0, 0.0
 
             if self.accelerator.is_main_process:
                 self.logger.info("  |- Train/Loss: {:.6f}".format(train_total_loss))
                 self.logger.info("  |- Valid/Loss: {:.6f}".format(valid_total_loss))
-            self.accelerator.log(
-                {
-                    "Epoch/Train Loss": train_total_loss,
-                    "Epoch/Valid Loss": valid_total_loss,
-                },
-                step=self.epoch,
-            )
+            if self.accelerator.is_main_process:
+                self.accelerator.log(
+                    {
+                        "Epoch/Train Loss": train_total_loss,
+                        "Epoch/Valid Loss": valid_total_loss,
+                    },
+                    step=self.epoch,
+                )
 
             self.accelerator.wait_for_everyone()
             if isinstance(self.scheduler, dict):
@@ -764,9 +922,10 @@ class BaseTrainer:
         self.accelerator.end_training()
 
     def echo_log(self, losses, mode="Training"):
+        max_epoch_display = "∞" if self.max_epoch == float("inf") else str(int(self.max_epoch))
         message = [
-            "{} - Epoch {} Step {}: [{:.3f} s/step]".format(
-                mode, self.epoch + 1, self.step, self.time_window.average
+            "{} - Epoch {} / {} (Step {} / {}): [{:.5f} s/step]".format(
+                mode, self.epoch + 1, max_epoch_display, self.step, self.steps_per_epoch, self.time_window.average
             )
         ]
 

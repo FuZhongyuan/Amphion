@@ -105,6 +105,8 @@ class SemanticToMelDiT(nn.Module):
         self.register_buffer("sqrt_alphas_cumprod", torch.sqrt(alphas_cumprod))
         self.register_buffer("sqrt_one_minus_alphas_cumprod", torch.sqrt(1.0 - alphas_cumprod))
         self.register_buffer("sqrt_recip_alphas", torch.sqrt(1.0 / alphas))
+        self.register_buffer("sqrt_recip_alphas_cumprod", torch.sqrt(1.0 / alphas_cumprod))
+        self.register_buffer("sqrt_recipm1_alphas_cumprod", torch.sqrt(1.0 / alphas_cumprod - 1))
         self.register_buffer("posterior_variance", betas * (1.0 - alphas_cumprod_prev) / (1.0 - alphas_cumprod))
 
     def reset_parameters(self):
@@ -261,17 +263,21 @@ class SemanticToMelDiT(nn.Module):
         prompt_mask=None,
         n_timesteps=50,
         cfg=1.0,
+        use_ddim=True,
+        ddim_eta=0.0,
     ):
         """
-        Reverse diffusion for inference.
+        Reverse diffusion for inference using DDIM or DDPM sampling.
 
         Args:
             cond: semantic condition (B, T_total, hidden_size)
             prompt_mel: prompt mel (B, T_prompt, mel_dim)
             x_mask: target mask (B, T_target)
             prompt_mask: prompt mask (B, T_prompt)
-            n_timesteps: number of denoising steps
+            n_timesteps: number of denoising steps (can be much smaller with DDIM)
             cfg: classifier-free guidance scale
+            use_ddim: whether to use DDIM sampling (faster, fewer steps needed)
+            ddim_eta: DDIM eta parameter (0=deterministic, 1=DDPM)
 
         Returns:
             Generated mel (B, T_target, mel_dim)
@@ -293,11 +299,11 @@ class SemanticToMelDiT(nn.Module):
             device=cond.device,
         )
 
-        # Determine timesteps to use
+        # Create timestep sequence for DDIM
         step_size = self.num_diffusion_steps // n_timesteps
         timesteps = list(range(self.num_diffusion_steps - 1, -1, -step_size))
 
-        for t in timesteps:
+        for i, t in enumerate(timesteps):
             t_batch = torch.full((cond.shape[0],), t, device=cond.device, dtype=torch.long)
 
             # Concatenate prompt and current estimate
@@ -320,19 +326,48 @@ class SemanticToMelDiT(nn.Module):
                 uncond_noise = self.mel_out_proj(uncond_hidden)
                 noise_pred = noise_pred + cfg * (noise_pred - uncond_noise)
 
-            # Denoise step
-            betas_t = self.betas[t]
-            sqrt_one_minus_alphas_cumprod_t = self.sqrt_one_minus_alphas_cumprod[t]
-            sqrt_recip_alphas_t = self.sqrt_recip_alphas[t]
+            if use_ddim:
+                # DDIM sampling step
+                alpha_cumprod_t = self.alphas_cumprod[t]
 
-            model_mean = sqrt_recip_alphas_t * (x_t - betas_t * noise_pred / sqrt_one_minus_alphas_cumprod_t)
+                # Get alpha_cumprod for previous timestep
+                if i + 1 < len(timesteps):
+                    t_prev = timesteps[i + 1]
+                    alpha_cumprod_t_prev = self.alphas_cumprod[t_prev]
+                else:
+                    alpha_cumprod_t_prev = torch.tensor(1.0, device=cond.device)
 
-            if t > 0:
-                posterior_variance_t = self.posterior_variance[t]
-                noise = torch.randn_like(x_t)
-                x_t = model_mean + math.sqrt(posterior_variance_t) * noise
+                # Predict x_0
+                pred_x0 = (x_t - math.sqrt(1 - alpha_cumprod_t) * noise_pred) / math.sqrt(alpha_cumprod_t)
+
+                # Compute sigma for DDIM
+                sigma_t = ddim_eta * math.sqrt(
+                    (1 - alpha_cumprod_t_prev) / (1 - alpha_cumprod_t) * (1 - alpha_cumprod_t / alpha_cumprod_t_prev)
+                )
+
+                # Direction pointing to x_t
+                dir_xt = math.sqrt(1 - alpha_cumprod_t_prev - sigma_t ** 2) * noise_pred
+
+                # DDIM update
+                x_t = math.sqrt(alpha_cumprod_t_prev) * pred_x0 + dir_xt
+
+                if sigma_t > 0 and t > 0:
+                    noise = torch.randn_like(x_t)
+                    x_t = x_t + sigma_t * noise
             else:
-                x_t = model_mean
+                # Original DDPM sampling
+                betas_t = self.betas[t]
+                sqrt_one_minus_alphas_cumprod_t = self.sqrt_one_minus_alphas_cumprod[t]
+                sqrt_recip_alphas_t = self.sqrt_recip_alphas[t]
+
+                model_mean = sqrt_recip_alphas_t * (x_t - betas_t * noise_pred / sqrt_one_minus_alphas_cumprod_t)
+
+                if t > 0:
+                    posterior_variance_t = self.posterior_variance[t]
+                    noise = torch.randn_like(x_t)
+                    x_t = model_mean + math.sqrt(posterior_variance_t) * noise
+                else:
+                    x_t = model_mean
 
         return x_t
 

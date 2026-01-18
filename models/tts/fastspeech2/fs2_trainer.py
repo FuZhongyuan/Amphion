@@ -81,15 +81,18 @@ class FastSpeech2Trainer(TTSTrainer):
             with self.accelerator.accumulate(self.model):
                 loss, train_losses = self._train_step(batch)
                 self.accelerator.backward(loss)
-                grad_clip_thresh = self.cfg.train.grad_clip_thresh
-                nn.utils.clip_grad_norm_(self.model.parameters(), grad_clip_thresh)
-                self.optimizer.step()
-                self.scheduler.step()
-                self.optimizer.zero_grad()
+                # Only clip gradients and step optimizer/scheduler when accumulation is complete
+                if self.accelerator.sync_gradients:
+                    grad_clip_thresh = self.cfg.train.grad_clip_thresh
+                    nn.utils.clip_grad_norm_(self.model.parameters(), grad_clip_thresh)
+                    self.optimizer.step()
+                    self.scheduler.step()
+                    self.optimizer.zero_grad()
+
             self.batch_count += 1
 
-            # Update info for each step
-            if self.batch_count % self.cfg.train.gradient_accumulation_step == 0:
+            # Update info for each step (when gradients are actually applied)
+            if self.accelerator.sync_gradients:
                 epoch_sum_loss += loss
                 for key, value in train_losses.items():
                     if key not in epoch_losses.keys():

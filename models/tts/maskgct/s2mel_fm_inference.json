@@ -3,6 +3,12 @@
     "dataset": {
         "ljspeech": 1.0
     },
+    "inference": {
+        "t2s_n_timesteps": 60,
+        "s2mel_n_timesteps": 10,
+        "t2s_cfg": 1.0,
+        "s2mel_cfg": 1.0
+    },
     "preprocess": {
         "dataset_type": "ljspeech",
         "ljspeech_data_root": "data/LJSpeech-1.1",
@@ -44,13 +50,13 @@
         },
         "s2mel_fm": {
             "mel_dim": 80,
-            "hidden_size": 512,
+            "hidden_size": 1024,
             "num_layers": 12,
             "num_heads": 8,
             "cfg_scale": 0.15,
             "cond_codebook_size": 512,
             "sigma": 1e-5,
-            "time_scheduler": "linear",
+            "time_scheduler": "cos",
             "gradient_checkpointing": false
         },
         "semantic_codec": {
@@ -78,7 +84,7 @@
     "log_dir": "ckpts/maskgct_mini",
     "train": {
         "max_epoch": 0,
-        "use_dynamic_batchsize": false,
+        "use_dynamic_batchsize": true,
         "max_tokens": 8000000,
         "max_sentences": 50,
         "lr_warmup_steps": 5000,

@@ -54,6 +54,9 @@ class TTSInference(object):
 
         self.acoustic_model_dir = args.acoustics_dir
         self.logger.debug(f"Acoustic model dir: {args.acoustics_dir}")
+        
+        # Set save format environment variable for loading
+        self._set_load_format_env()
 
         if args.vocoder_dir is not None:
             self.vocoder_dir = args.vocoder_dir
@@ -93,7 +96,6 @@ class TTSInference(object):
         # Init with accelerate
         self.logger.info("Initializing accelerate...")
         start = time.monotonic_ns()
-        self.accelerator = accelerate.Accelerator()
         self.model = self.accelerator.prepare(self.model)
         if self.infer_type == "batch":
             self.test_dataloader = self.accelerator.prepare(self.test_dataloader)
@@ -163,15 +165,21 @@ class TTSInference(object):
             ls.sort(key=lambda x: int(x.split("_")[-3].split("-")[-1]), reverse=True)
             checkpoint_path = ls[0]
 
-        if (
-            Path(os.path.join(checkpoint_path, "model.safetensors")).exists()
-            and accelerate.__version__ < "0.25"
-        ):
+        # Check if we should use safetensors or bin format
+        save_format = getattr(self.cfg.train, 'save_format', 'bin')
+
+        if save_format == 'safetensors' and Path(os.path.join(checkpoint_path, "model.safetensors")).exists():
             self.model.load_state_dict(
                 load_file(os.path.join(checkpoint_path, "model.safetensors")),
                 strict=False,
             )
+        elif save_format == 'bin' and Path(os.path.join(checkpoint_path, "pytorch_model.bin")).exists():
+            # Load pytorch model directly
+            import torch
+            state_dict = torch.load(os.path.join(checkpoint_path, "pytorch_model.bin"), map_location='cpu')
+            self.model.load_state_dict(state_dict, strict=False)
         else:
+            # Use accelerator.load_state which can handle both formats
             self.accelerator.load_state(str(checkpoint_path))
         return str(checkpoint_path)
 
@@ -276,3 +284,17 @@ class TTSInference(object):
         random.seed(seed)
         np.random.seed(seed)
         torch.random.manual_seed(seed)
+
+    def _set_load_format_env(self):
+        """Set environment variable to control model load format."""
+        # Check if save_format is specified in config, default to 'bin' if not found
+        save_format = getattr(self.cfg.train, 'save_format', 'bin')
+        if save_format == 'bin':
+            os.environ['ACCELERATE_USE_SAFETENSORS'] = 'false'
+            self.logger.info("Using bin format for model loading.")
+        elif save_format == 'safetensors':
+            os.environ['ACCELERATE_USE_SAFETENSORS'] = 'true'
+            self.logger.info("Using safetensors format for model loading.")
+        else:
+            os.environ['ACCELERATE_USE_SAFETENSORS'] = 'false'
+            self.logger.warning(f"Unknown save_format '{save_format}', using 'bin' as default for loading.")

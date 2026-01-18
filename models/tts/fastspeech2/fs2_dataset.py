@@ -90,10 +90,9 @@ class FS2Dataset(BaseOfflineDataset):
             )
 
         self.speaker_map = {}
-        if os.path.exists(os.path.join(cfg.processed_dir, "spk2id.json")):
-            with open(
-                os.path.exists(os.path.join(cfg.processed_dir, "spk2id.json"))
-            ) as f:
+        spk2id_path = os.path.join(cfg.processed_dir, "spk2id.json")
+        if os.path.exists(spk2id_path):
+            with open(spk2id_path, "r") as f:
                 self.speaker_map = json.load(f)
 
         self.metadata = self.check_metadata()
@@ -128,7 +127,8 @@ class FS2Dataset(BaseOfflineDataset):
 
         # speaker
         if len(self.speaker_map) > 0:
-            speaker_id = self.speaker_map[utt_info["Singer"]]
+            speaker_key = utt_info.get("Singer", utt_info.get("Speaker", dataset))
+            speaker_id = self.speaker_map.get(speaker_key, 0)
         else:
             speaker_id = 0
 
@@ -327,10 +327,9 @@ class FS2TestDataset(BaseTestDataset):
             )
 
         self.speaker_map = {}
-        if os.path.exists(os.path.join(cfg.processed_dir, "spk2id.json")):
-            with open(
-                os.path.exists(os.path.join(cfg.processed_dir, "spk2id.json"))
-            ) as f:
+        spk2id_path = os.path.join(cfg.processed_dir, "spk2id.json")
+        if os.path.exists(spk2id_path):
+            with open(spk2id_path, "r") as f:
                 self.speaker_map = json.load(f)
 
     def __getitem__(self, index):
@@ -351,7 +350,8 @@ class FS2TestDataset(BaseTestDataset):
 
         # speaker
         if len(self.speaker_map) > 0:
-            speaker_id = self.speaker_map[utt_info["Singer"]]
+            speaker_key = utt_info.get("Singer", utt_info.get("Speaker", dataset))
+            speaker_id = self.speaker_map.get(speaker_key, 0)
         else:
             speaker_id = 0
 

@@ -4,7 +4,9 @@
     "Fastspeech2",
     "VITS",
     "VALLE",
-    "NaturalSpeech2"
+    "NaturalSpeech2",
+    "Tacotron2",
+    "GlowTTS"
   ],
   "task_type": "tts",
   "preprocess": {

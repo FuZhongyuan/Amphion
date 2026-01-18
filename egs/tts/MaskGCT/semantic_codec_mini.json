@@ -1,17 +1,17 @@
 {
     "model_type": "SemanticCodec",
     "dataset": {
-        "ljspeech": 1.0
+        "libritts": 1.0
     },
     "preprocess": {
-        "dataset_type": "ljspeech",
-        "ljspeech_data_root": "data/LJSpeech-1.1",
-        "ljspeech_cache_path": "data/LJSpeechCache",
+        "dataset_type": "libritts",
+        "libritts_data_root": "data/LibriTTS",
+        "libritts_cache_path": "data/LibriTTSCache",
         "hop_size": 320,
         "sample_rate": 16000,
         "max_length": 128000,
         "random_crop": true,
-        "processed_dir": "data/processed_maskgct/ljspeech",
+        "processed_dir": "data/processed_maskgct/libritts",
         "valid_file": "valid.json",
         "train_file": "train.json",
         "load_semantic_features": true,
@@ -35,14 +35,14 @@
     "log_dir": "ckpts/maskgct_mini",
     "train": {
         "max_epoch": 0,
-        "use_dynamic_batchsize": false,
-        "max_tokens": 8000000,
+        "use_dynamic_batchsize": true,
+        "max_tokens": 50000,
         "max_sentences": 100,
-        "lr_warmup_steps": 1000,
-        "lr_scheduler": "constant",
+        "lr_warmup_steps": 5000,
+        "lr_scheduler": "inverse_sqrt",
         "num_train_steps": 50000,
         "adam": {
-            "lr": 1e-4,
+            "lr": 5e-5,
             "betas": [0.5, 0.9]
         },
         "ddp": false,
@@ -55,7 +55,7 @@
         "save_checkpoints_steps": 2000,
         "valid_interval": 2000,
         "keep_checkpoint_max": 50,
-        "gradient_accumulation_step": 2,
+        "gradient_accumulation_step": 1,
         "tracker": ["tensorboard"],
         "save_checkpoint_stride": [1],
         "keep_last": [5],
@@ -63,8 +63,7 @@
         "dataloader": {
             "num_worker": 16,
             "pin_memory": true,
-            // "non_blocking": true,
-            "prefetch_factor": 8
+            "prefetch_factor": 4
         }
     }
 }

@@ -174,6 +174,8 @@ class MaskGCT_Inference_Pipeline:
             cfg=cfg,
             rescale_cfg=rescale_cfg,
         )
+        print("semantic_code", semantic_code)
+        print("predict semantic", predict_semantic)
 
         print("predict semantic shape", predict_semantic.shape)
 

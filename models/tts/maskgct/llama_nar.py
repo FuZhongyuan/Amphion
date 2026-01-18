@@ -6,6 +6,7 @@
 from transformers import LlamaConfig, LlamaForCausalLM, LlamaModel
 import torch
 import torch.nn.functional as F
+import torch.utils.checkpoint as checkpoint
 import numpy as np
 import os
 import torch.nn as nn
@@ -249,7 +250,13 @@ class DiffLlama(LlamaModel):
                 hidden_size, dim_cond=hidden_size
             )
 
+        # Remove unused embed_tokens from parent class to avoid DDP unused parameter issues
+        self.embed_tokens = None
+
         self.post_init()
+        
+        # Flag to enable gradient checkpointing with use_reentrant=False for DDP compatibility
+        self.gradient_checkpointing_use_reentrant = False
 
         # self.reset_parameters()
 
@@ -392,8 +399,19 @@ class DiffLlama(LlamaModel):
             )
 
             if self.gradient_checkpointing and self.training:
-                raise NotImplementedError
-
+                layer_outputs = checkpoint.checkpoint(
+                    create_diff_llama_layer_forward(
+                        decoder_layer,
+                        past_key_value=past_key_value,
+                        output_attentions=output_attentions,
+                        use_cache=use_cache,
+                    ),
+                    hidden_states,
+                    attention_mask,
+                    position_ids,
+                    diffusion_step,
+                    use_reentrant=False,
+                )
             else:
                 layer_outputs = decoder_layer(
                     hidden_states,
@@ -422,6 +440,31 @@ class DiffLlama(LlamaModel):
         next_cache = next_decoder_cache if use_cache else None
 
         return hidden_states
+
+
+def create_diff_llama_layer_forward(
+    layer,
+    past_key_value: Optional[Tuple[torch.Tensor]] = None,
+    output_attentions: Optional[bool] = False,
+    use_cache: Optional[bool] = False,
+):
+    def custom_forward(
+        hidden_states,
+        attention_mask,
+        position_ids,
+        cond_embedding,
+    ):
+        return layer(
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_value=past_key_value,
+            output_attentions=output_attentions,
+            use_cache=use_cache,
+            cond_embedding=cond_embedding,
+        )
+
+    return custom_forward
 
 
 class DiffLlamaPrefix(LlamaModel):
@@ -479,6 +522,9 @@ class DiffLlamaPrefix(LlamaModel):
         self.embed_tokens = None
 
         self.post_init()
+        
+        # Flag to enable gradient checkpointing with use_reentrant=False for DDP compatibility
+        self.gradient_checkpointing_use_reentrant = False
 
     def _prepare_decoder_attention_mask(
         self, attention_mask, input_shape, inputs_embeds, past_key_values_length
@@ -624,8 +670,19 @@ class DiffLlamaPrefix(LlamaModel):
             )
 
             if self.gradient_checkpointing and self.training:
-                raise NotImplementedError
-
+                layer_outputs = checkpoint.checkpoint(
+                    create_diff_llama_layer_forward(
+                        decoder_layer,
+                        past_key_value=past_key_value,
+                        output_attentions=output_attentions,
+                        use_cache=use_cache,
+                    ),
+                    hidden_states,
+                    attention_mask,
+                    position_ids,
+                    diffusion_step,
+                    use_reentrant=False,
+                )
             else:
                 layer_outputs = decoder_layer(
                     hidden_states,

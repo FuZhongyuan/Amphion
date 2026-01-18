@@ -166,6 +166,443 @@ export HF_ENDPOINT=https://hf-mirror.com
 
 We use the [Emilia](https://huggingface.co/datasets/amphion/Emilia-Dataset) dataset to train our models. Emilia is a multilingual and diverse in-the-wild speech dataset designed for large-scale speech generation. In this work, we use English and Chinese data from Emilia, each with 50K hours of speech (totaling 100K hours).
 
+## Training Recipe
+
+For advanced users, we provide the following training recipe:
+
+### Dataset Preparation
+
+We support multiple datasets for training. The default dataset is **LibriTTS**. You can also choose **Emilia** or **LJSpeech-1.1** datasets.
+
+#### Option 1: LibriTTS Dataset (Default)
+
+1. Download the LibriTTS dataset from the [official website](https://www.openslr.org/60/).
+
+2. Extract the dataset. The directory structure should be:
+   ```
+   LibriTTS/
+   ├── train-clean-100/
+   ├── train-clean-360/
+   ├── train-other-500/
+   ├── dev-clean/
+   ├── dev-other/
+   ├── test-clean/
+   └── test-other/
+   ```
+
+3. Configure the dataset paths in your training configuration files:
+   - Set `"dataset_type": "libritts"` in the `preprocess` section
+   - Set `"libritts_data_root": "/path/to/LibriTTS"` 
+   - Set `"libritts_cache_path": "/path/to/libritts_cache"`
+
+#### Option 2: Emilia Dataset
+
+1. Please download the dataset following the official instructions provided by [Emilia](https://huggingface.co/datasets/amphion/Emilia-Dataset).
+
+2. Due to Emilia's substantial storage requirements, data loading logic may vary slightly depending on storage configuration. We provide a reference implementation for local disk loading [in this file](../../base/maskgct_emilia_dataset.py). After downloading the Emilia dataset, please adapt the data loading logic accordingly. In most cases, only modifying the paths specified in [Lines 36-37](../../base/maskgct_emilia_dataset.py#L36) should be sufficient: 
+
+   ```python
+   MNT_PATH = "[Please fill out your emilia data root path]"
+   CACHE_PATH = "[Please fill out your emilia cache path]"
+   ```
+
+3. Update the configuration files:
+   - Set `"dataset_type": "emilia"` in the `preprocess` section
+   - Set `"dataset": {"emilia": 1.0}` in the `dataset` section
+   - Set `"use_emilia_dataset": true` in the `train` section
+
+#### Option 3: LJSpeech-1.1 Dataset
+
+1. Download the LJSpeech-1.1 dataset from the [official website](https://keithito.com/LJ-Speech-Dataset/).
+
+2. Extract the dataset. The directory structure should be:
+   ```
+   LJSpeech-1.1/
+   ├── metadata.csv
+   └── wavs/
+       ├── LJ001-0001.wav
+       ├── LJ001-0002.wav
+       └── ...
+   ```
+
+3. Configure the dataset paths in your training configuration file (see Configuration section below).
+
+### Launch Training
+
+Train the MaskGCT models in the following order:
+
+> **Note**: You need to run the following commands under the `Amphion` root path:
+> ```
+> git clone https://github.com/open-mmlab/Amphion.git
+> cd Amphion
+> ```
+
+#### Step 1: Semantic Codec
+
+The semantic codec converts speech to semantic tokens using w2v-bert-2.0 features.
+
+**For LibriTTS Dataset (Default):**
+
+1. Update the configuration file `egs/tts/MaskGCT/semantic_codec.json` with your LibriTTS paths:
+
+```json
+{
+    "preprocess": {
+        "libritts_data_root": "/path/to/LibriTTS",
+        "libritts_cache_path": "/path/to/libritts_cache"
+    }
+}
+```
+
+2. Run the training script:
+
+```bash
+sh egs/tts/MaskGCT/train_semantic_codec.sh
+```
+
+**For Emilia Dataset:**
+
+1. Modify the configuration file `egs/tts/MaskGCT/semantic_codec.json`:
+
+```json
+{
+    "dataset": {
+        "emilia": 1.0
+    },
+    "preprocess": {
+        "dataset_type": "emilia"
+    },
+    "train": {
+        "use_emilia_dataset": true
+    }
+}
+```
+
+2. Run the training script:
+
+```bash
+sh egs/tts/MaskGCT/train_semantic_codec.sh
+```
+
+**For LJSpeech-1.1 Dataset:**
+
+1. Modify the configuration file `egs/tts/MaskGCT/semantic_codec.json`:
+
+```json
+{
+    "dataset": {
+        "ljspeech": 1.0
+    },
+    "preprocess": {
+        "dataset_type": "ljspeech",
+        "ljspeech_data_root": "/path/to/LJSpeech-1.1",
+        "ljspeech_cache_path": "/path/to/ljspeech_cache"
+    }
+}
+```
+
+2. Run the training script:
+
+```bash
+sh egs/tts/MaskGCT/train_semantic_codec.sh
+```
+
+**Configuration:**
+
+Before training, configure your dataset paths in the JSON configuration file `egs/tts/MaskGCT/semantic_codec.json`:
+
+```json
+{
+    "model": {
+        "semantic_codec": {
+            "codebook_size": 8192,
+            "hidden_size": 1024,
+            "codebook_dim": 8,
+            "vocos_dim": 384,
+            "vocos_intermediate_dim": 2048,
+            "vocos_num_layers": 12,
+            "rec_loss_weight": 32.0
+        },
+        "representation_type": "w2v-bert-2.0",
+        "representation_sample_rate": 16000,
+        "use_norm_feat": true,
+        "representation_stat_mean_var_path": "models/tts/maskgct/ckpt/wav2vec2bert_stats.pt"
+    }
+}
+```
+
+#### Step 2: Acoustic Codec
+
+The acoustic codec converts speech to acoustic tokens and reconstructs waveform from acoustic tokens.
+
+**For LibriTTS Dataset (Default):**
+
+1. Update the configuration file `egs/tts/MaskGCT/acoustic_codec.json` with your LibriTTS paths:
+
+```json
+{
+    "preprocess": {
+        "libritts_data_root": "/path/to/LibriTTS",
+        "libritts_cache_path": "/path/to/libritts_cache"
+    }
+}
+```
+
+2. Run the training script:
+
+```bash
+sh egs/tts/MaskGCT/train_acoustic_codec.sh
+```
+
+**For Emilia or LJSpeech-1.1 Dataset:**
+
+Modify the configuration file `egs/tts/MaskGCT/acoustic_codec.json` similarly as described in Step 1, then run:
+
+```bash
+sh egs/tts/MaskGCT/train_acoustic_codec.sh
+```
+
+**Configuration:**
+
+Configure the acoustic codec parameters in `egs/tts/MaskGCT/acoustic_codec.json`:
+
+```json
+{
+    "model": {
+        "acoustic_codec": {
+            "encoder": {
+                "d_model": 96,
+                "up_ratios": [3, 4, 5, 8],
+                "out_channels": 256,
+                "use_tanh": false
+            },
+            "decoder": {
+                "num_quantizers": 12,
+                "codebook_size": 1024,
+                "codebook_dim": 8,
+                "quantizer_type": "fvq",
+                "use_vocos": true,
+                "vocos_dim": 512,
+                "vocos_intermediate_dim": 4096,
+                "vocos_num_layers": 30
+            }
+        }
+    }
+}
+```
+
+#### Step 3: MaskGCT-T2S
+
+The T2S model predicts semantic tokens with text and prompt semantic tokens.
+
+**For LibriTTS Dataset (Default):**
+
+1. First, update the semantic codec pretrained path and LibriTTS paths in `egs/tts/MaskGCT/t2s.json`:
+
+```json
+{
+    "preprocess": {
+        "libritts_data_root": "/path/to/LibriTTS",
+        "libritts_cache_path": "/path/to/libritts_cache"
+    },
+    "model": {
+        "semantic_codec": {
+            "pretrained_path": "[Your semantic codec checkpoint path]/pytorch_model.bin"
+        }
+    }
+}
+```
+
+2. Run the training script:
+
+```bash
+sh egs/tts/MaskGCT/train_t2s.sh
+```
+
+**For Emilia or LJSpeech-1.1 Dataset:**
+
+Modify the configuration file `egs/tts/MaskGCT/t2s.json` with dataset paths and pretrained model paths (as described in Step 1), then run:
+
+```bash
+sh egs/tts/MaskGCT/train_t2s.sh
+```
+
+**Configuration:**
+
+Configure the T2S model parameters in `egs/tts/MaskGCT/t2s.json`:
+
+```json
+{
+    "model": {
+        "t2s_model": {
+            "hidden_size": 1536,
+            "num_layers": 16,
+            "num_heads": 16,
+            "cfg_scale": 0.15,
+            "cond_codebook_size": 8192,
+            "cond_dim": 1024,
+            "use_phone_cond": true
+        },
+        "semantic_codec": {
+            "pretrained_path": "[Path to trained semantic codec checkpoint]"
+        }
+    },
+    "preprocess": {
+        "load_phone": true
+    }
+}
+```
+
+#### Step 4: MaskGCT-S2A
+
+The S2A model predicts acoustic tokens conditioned on semantic tokens.
+
+**For LibriTTS Dataset (Default):**
+
+1. First, update the pretrained model paths and LibriTTS paths in `egs/tts/MaskGCT/s2a.json`:
+
+```json
+{
+    "preprocess": {
+        "libritts_data_root": "/path/to/LibriTTS",
+        "libritts_cache_path": "/path/to/libritts_cache"
+    },
+    "model": {
+        "semantic_codec": {
+            "pretrained_path": "[Your semantic codec checkpoint path]/pytorch_model.bin"
+        },
+        "acoustic_codec": {
+            "pretrained_path": "[Your acoustic codec checkpoint directory]"
+        }
+    }
+}
+```
+
+2. Run the training script:
+
+```bash
+sh egs/tts/MaskGCT/train_s2a.sh
+```
+
+**For Emilia or LJSpeech-1.1 Dataset:**
+
+Modify the configuration file `egs/tts/MaskGCT/s2a.json` with dataset paths and pretrained model paths (as described in Step 1), then run:
+
+```bash
+sh egs/tts/MaskGCT/train_s2a.sh
+```
+
+**Configuration:**
+
+Configure the S2A model parameters in `egs/tts/MaskGCT/s2a.json`:
+
+```json
+{
+    "model": {
+        "s2a_model_type": "full",
+        "s2a_model": {
+            "s2a_1layer": {
+                "num_quantizer": 1,
+                "hidden_size": 1024,
+                "num_layers": 16,
+                "num_heads": 16,
+                "codebook_size": 1024,
+                "cfg_scale": 0.15,
+                "mask_layer_schedule": "linear",
+                "cond_codebook_size": 8192,
+                "cond_dim": 1024,
+                "predict_layer_1": true
+            },
+            "s2a_full": {
+                "num_quantizer": 12,
+                "hidden_size": 1024,
+                "num_layers": 16,
+                "num_heads": 16,
+                "codebook_size": 1024,
+                "cfg_scale": 0.15,
+                "mask_layer_schedule": "linear",
+                "cond_codebook_size": 8192,
+                "cond_dim": 1024,
+                "predict_layer_1": false
+            }
+        },
+        "semantic_codec": {
+            "pretrained_path": "[Path to trained semantic codec checkpoint]"
+        },
+        "acoustic_codec": {
+            "pretrained_path": "[Path to trained acoustic codec checkpoint directory]"
+        }
+    }
+}
+```
+
+**Note:** The S2A model can be trained in two stages:
+- First train `s2a_1layer` (1 quantizer) by setting `"s2a_model_type": "1layer"`
+- Then train `s2a_full` (12 quantizers) by setting `"s2a_model_type": "full"` and providing the 1layer checkpoint as `gt_code` during inference
+
+### Mini Configuration for Limited GPU Memory
+
+For users with limited GPU memory (e.g., RTX 30xx series with 24GB VRAM), we provide mini configurations that significantly reduce memory usage while maintaining reasonable performance:
+
+#### Mini Model Specifications
+- **Semantic Codec**: 4096 codebook size, 512 hidden size, 8 vocos layers
+- **Acoustic Codec**: 8 quantizers, 64 d_model, 20 vocos layers
+- **T2S**: 768 hidden size, 12 layers, 12 heads, 512 cond_dim
+- **S2A**: 512 hidden size, 12 layers, 12 heads, 8 quantizers, 512 cond_dim
+- **Training**: batch_size=8, gradient_accumulation=4, max_sentences=50
+
+#### Training Mini Models
+
+**Step 1: Train Mini Semantic Codec**
+```bash
+sh egs/tts/MaskGCT/train_semantic_codec_mini.sh
+```
+
+**Step 2: Train Mini Acoustic Codec**
+```bash
+sh egs/tts/MaskGCT/train_acoustic_codec_mini.sh
+```
+
+**Step 3: Train Mini T2S**
+```bash
+sh egs/tts/MaskGCT/train_t2s_mini.sh
+```
+
+**Step 4: Train Mini S2A**
+```bash
+sh egs/tts/MaskGCT/train_s2a_mini.sh
+```
+
+#### Mini Configuration Files
+- `semantic_codec_mini.json` - Mini semantic codec configuration
+- `acoustic_codec_mini.json` - Mini acoustic codec configuration
+- `t2s_mini.json` - Mini T2S model configuration
+- `s2a_mini.json` - Mini S2A model configuration
+
+**Memory Reduction Strategies:**
+- Smaller model dimensions and layers
+- Reduced batch size with gradient accumulation
+- Fewer data loading workers
+- Shorter audio sequences (max_length halved)
+- Lower checkpoint retention limits
+
+### Training Tips
+
+1. **Training Order**: Train models in the order: Semantic Codec → Acoustic Codec → T2S → S2A
+2. **Checkpoint Paths**: Make sure to update the pretrained model paths in T2S and S2A configuration files
+3. **GPU Memory**: Adjust `batch_size` and `max_tokens` in the configuration files based on your GPU memory
+4. **Mixed Precision**: The training scripts use `--mixed_precision="bf16"` by default. You can modify this in the shell scripts if needed
+5. **Resume Training**: To resume training, add `--resume` flag to the training command:
+
+```bash
+CUDA_VISIBLE_DEVICES="0" accelerate launch --main_process_port 14556 --mixed_precision="bf16" \
+    "${work_dir}"/bins/tts/maskgct_train.py \
+    --config=$exp_config \
+    --exp_name=$exp_name \
+    --log_level debug \
+    --resume
+```
+
 
 ## Evaluation Results of MaskGCT
 

@@ -10,6 +10,10 @@ from models.tts.maskgct.semantic_codec_trainer import SemanticCodecTrainer
 from models.tts.maskgct.acoustic_codec_trainer import AcousticCodecTrainer
 from models.tts.maskgct.t2s_trainer import T2STrainer
 from models.tts.maskgct.s2a_trainer import S2ATrainer
+from models.tts.maskgct.s2mel_dit_trainer import S2MelDiTTrainer
+from models.tts.maskgct.s2mel_fm_trainer import S2MelFMTrainer
+from models.tts.maskgct.t2s_finetune_trainer import T2SFineTuneTrainer
+from models.tts.maskgct.t2s_curriculum_trainer import T2SCurriculumTrainer
 
 
 def build_trainer(args, cfg):
@@ -19,6 +23,10 @@ def build_trainer(args, cfg):
         "AcousticCodec": AcousticCodecTrainer,
         "T2S": T2STrainer,
         "S2A": S2ATrainer,
+        "S2MelDiT": S2MelDiTTrainer,
+        "S2MelFM": S2MelFMTrainer,
+        "T2S_FineTune": T2SFineTuneTrainer,
+        "T2S_Curriculum": T2SCurriculumTrainer,
     }
     
     trainer_class = supported_trainer[cfg.model_type]

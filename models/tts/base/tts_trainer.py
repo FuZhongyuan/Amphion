@@ -7,6 +7,7 @@ import json
 import os
 import shutil
 import torch
+import torch.nn as nn
 import time
 from pathlib import Path
 import torch
@@ -42,6 +43,10 @@ class TTSTrainer(BaseTrainer):
 
         with self.accelerator.main_process_first():
             self.logger = get_logger(args.exp_name, log_level="INFO")
+        
+        # Set save format environment variable
+        self.save_format = getattr(self.cfg.train, 'save_format', 'bin')
+        self._set_save_format_env()
 
         # Log some info
         self.logger.info("=" * 56)
@@ -402,7 +407,8 @@ class TTSTrainer(BaseTrainer):
                         self.epoch, self.step, train_total_loss
                     ),
                 )
-                self.accelerator.save_state(path)
+                safe_serialization = self.save_format == 'safetensors'
+                self.accelerator.save_state(path, safe_serialization=safe_serialization)
 
                 json.dump(
                     self.checkpoints_path,
@@ -451,13 +457,15 @@ class TTSTrainer(BaseTrainer):
                     self.epoch, self.step, valid_total_loss
                 ),
             )
+            safe_serialization = self.save_format == 'safetensors'
             self.accelerator.save_state(
                 os.path.join(
                     self.checkpoint_dir,
                     "final_epoch-{:04d}_step-{:07d}_loss-{:.6f}".format(
                         self.epoch, self.step, valid_total_loss
                     ),
-                )
+                ),
+                safe_serialization=safe_serialization
             )
 
             json.dump(
@@ -496,25 +504,48 @@ class TTSTrainer(BaseTrainer):
             # Do training step and BP
             with self.accelerator.accumulate(self.model):
                 total_loss, train_losses, _ = self._train_step(batch)
+                self.accelerator.backward(total_loss)
+                # Only clip gradients and step optimizer/scheduler when accumulation is complete
+                if self.accelerator.sync_gradients:
+                    # Gradient clipping
+                    if hasattr(self.cfg.train, 'grad_clip_thresh') and self.cfg.train.grad_clip_thresh > 0:
+                        if isinstance(self.model, dict):
+                            for key in self.model.keys():
+                                nn.utils.clip_grad_norm_(self.model[key].parameters(), self.cfg.train.grad_clip_thresh)
+                        else:
+                            nn.utils.clip_grad_norm_(self.model.parameters(), self.cfg.train.grad_clip_thresh)
+
+                    # Optimizer step
+                    if isinstance(self.optimizer, dict):
+                        for key in self.optimizer.keys():
+                            self.optimizer[key].step()
+                            self.optimizer[key].zero_grad()
+                    else:
+                        self.optimizer.step()
+                        self.optimizer.zero_grad()
+
+                    # Scheduler step
+                    if isinstance(self.scheduler, dict):
+                        for key in self.scheduler.keys():
+                            self.scheduler[key].step()
+                    else:
+                        if hasattr(self.scheduler, 'step_batch') and callable(getattr(self.scheduler, 'step_batch')):
+                            self.scheduler.step_batch(self.step)
+                        else:
+                            self.scheduler.step()
+
             self.batch_count += 1
 
-            # Update info for each step
-            # TODO: step means BP counts or batch counts?
-            if self.batch_count % self.cfg.train.gradient_accumulation_step == 0:
-                if isinstance(self.scheduler, dict):
-                    for key in self.scheduler.keys():
-                        self.scheduler[key].step()
-                else:
-                    if isinstance(self.scheduler, Eden):
-                        self.scheduler.step_batch(self.step)
-                    else:
-                        self.scheduler.step()
-
+            # Update info for each step (when gradients are actually applied)
+            if self.accelerator.sync_gradients:
                 epoch_sum_loss += total_loss
 
                 if isinstance(train_losses, dict):
                     for key, value in train_losses.items():
-                        epoch_losses[key] += value
+                        if key not in epoch_losses:
+                            epoch_losses[key] = value
+                        else:
+                            epoch_losses[key] += value
 
                 if isinstance(train_losses, dict):
                     for key, loss in train_losses.items():
@@ -719,3 +750,16 @@ class TTSTrainer(BaseTrainer):
                 os.path.join(self.exp_dir, self.cfg.preprocess.symbols_dict)
             )
         )
+
+    def _set_save_format_env(self):
+        """Set environment variable to control model save format."""
+        save_format = getattr(self.cfg.train, 'save_format', 'bin')
+        if save_format == 'bin':
+            os.environ['ACCELERATE_USE_SAFETENSORS'] = 'false'
+            self.logger.info("Using bin for model saving.")
+        elif save_format == 'safetensors':
+            os.environ['ACCELERATE_USE_SAFETENSORS'] = 'true'
+            self.logger.info("Using safetensors for model saving.")
+        else:
+            self.logger.warning(f"Unknown save_format '{save_format}', using 'bin' as default")
+            os.environ['ACCELERATE_USE_SAFETENSORS'] = 'false'

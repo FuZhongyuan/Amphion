@@ -78,7 +78,7 @@ if [ $running_stage -eq 1 ]; then
     fi
     CUDA_VISIBLE_DEVICES=$gpu python "${work_dir}"/bins/tts/preprocess.py \
         --config=$exp_config \
-        --num_workers=4 \
+        --num_workers=12 \
         --prepare_alignment=true
 fi
 
@@ -153,3 +153,11 @@ if [ $running_stage -eq 3 ]; then
         --vocoder_dir $vocoder_dir
 
 fi
+
+# sh egs/tts/FastSpeech2/run.sh --stage 3 \
+#     --infer_expt_dir ckpts/fastspeech2/fastspeech2_ljspeech \
+#     --infer_output_dir ckpts/fastspeech2/fastspeech2_ljspeech/result \
+#     --infer_mode "single" \
+#     --infer_text "This is a clip of generated speech with the given text from a TTS model." \
+#     --vocoder_dir ckpts/vocoder/hifigan_ljspeech/checkpoints \
+#     --gpu "4"

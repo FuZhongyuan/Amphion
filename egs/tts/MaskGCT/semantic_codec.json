@@ -5,8 +5,8 @@
     },
     "preprocess": {
         "dataset_type": "libritts",
-        "libritts_data_root": "/mnt/storage/fuzhongyuan_space/fzy_project/Amphion/data/LibriTTS",
-        "libritts_cache_path": "/mnt/storage/fuzhongyuan_space/fzy_project/Amphion/data/LibriTTSCache",
+        "libritts_data_root": "data/LibriTTS",
+        "libritts_cache_path": "data/LibriTTSCache",
         "hop_size": 320,
         "sample_rate": 16000,
         "max_length": 128000,
@@ -34,7 +34,7 @@
     "log_dir": "ckpts/maskgct",
     "train": {
         "max_epoch": 0,
-        "use_dynamic_batchsize": false,
+        "use_dynamic_batchsize": true,
         "max_tokens": 16000000,
         "max_sentences": 200,
         "lr_warmup_steps": 10000,

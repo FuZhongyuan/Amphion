@@ -1,0 +1,8 @@
+__pycache__/
+*.safetensors
+data/
+ckpts/fastspeech2/
+ckpts/tacotron2/
+ckpts/glowtts/
+ckpts/maskgct_mini/
+ckpts/

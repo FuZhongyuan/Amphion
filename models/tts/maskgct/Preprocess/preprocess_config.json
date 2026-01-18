@@ -1,0 +1,37 @@
+{
+  "semantic_model": {
+    "model_name": "facebook/w2v-bert-2.0",
+    "output_layer": 17
+  },
+  "preprocessing": {
+    "overwrite_existing": false,
+    "extract_mel": true,
+    "use_float16": true,
+    "samples_per_hdf5": 20000,
+    "mel_config": {
+      "preprocess": "AudioProcessor",
+      "sample_rate": 16000,
+      "hop_size": 320,
+      "win_size": 1024,
+      "n_fft": 1024,
+      "n_mel": 80,
+      "fmin": 0,
+      "fmax": 8000
+    },
+    "num_audio_workers": 12,
+    "num_save_workers": 4,
+    "prefetch_size": 20,
+    "max_retries": 3,
+    "retry_delay": 1.0
+  },
+  "datasets": {
+    "ljspeech": {
+      "data_root": "data/LJSpeech-1.1",
+      "processed_dir": "data/processed_maskgct/ljspeech"
+    },
+    "libritts": {
+      "data_root": "data/LibriTTS",
+      "processed_dir": "data/processed_maskgct/libritts"
+    }
+  }
+}
