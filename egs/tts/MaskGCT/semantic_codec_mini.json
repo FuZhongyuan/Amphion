@@ -1,0 +1,70 @@
+{
+    "model_type": "SemanticCodec",
+    "dataset": {
+        "ljspeech": 1.0
+    },
+    "preprocess": {
+        "dataset_type": "ljspeech",
+        "ljspeech_data_root": "data/LJSpeech-1.1",
+        "ljspeech_cache_path": "data/LJSpeechCache",
+        "hop_size": 320,
+        "sample_rate": 16000,
+        "max_length": 128000,
+        "random_crop": true,
+        "processed_dir": "data/processed_maskgct/ljspeech",
+        "valid_file": "valid.json",
+        "train_file": "train.json",
+        "load_semantic_features": true,
+        "use_semantic_cache": true
+    },
+    "model": {
+        "semantic_codec": {
+            "codebook_size": 512,
+            "hidden_size": 1024, // 这个与w2v-bert-2.0 模型的输出特征维度保持一致
+            "codebook_dim": 8,
+            "vocos_dim": 384,
+            "vocos_intermediate_dim": 2048,
+            "vocos_num_layers": 12,
+            "rec_loss_weight": 32.0 // 小 → 更偏向语义一致性
+        },
+        "representation_type": "w2v-bert-2.0",
+        "representation_sample_rate": 16000,
+        "use_norm_feat": true,
+        "representation_stat_mean_var_path": "models/tts/maskgct/ckpt/wav2vec2bert_stats.pt"
+    },
+    "log_dir": "ckpts/maskgct_mini",
+    "train": {
+        "max_epoch": 0,
+        "use_dynamic_batchsize": false,
+        "max_tokens": 8000000,
+        "max_sentences": 100,
+        "lr_warmup_steps": 1000,
+        "lr_scheduler": "constant",
+        "num_train_steps": 50000,
+        "adam": {
+            "lr": 1e-4,
+            "betas": [0.5, 0.9]
+        },
+        "ddp": false,
+        "random_seed": 114,
+        "batch_size": 32,  // each GPU
+        "epochs": 5000, // not used
+        "max_steps": 500000,
+        "total_training_steps": 100000,
+        "save_summary_steps": 500,
+        "save_checkpoints_steps": 2000,
+        "valid_interval": 2000,
+        "keep_checkpoint_max": 50,
+        "gradient_accumulation_step": 2,
+        "tracker": ["tensorboard"],
+        "save_checkpoint_stride": [1],
+        "keep_last": [5],
+        "run_eval": [true],
+        "dataloader": {
+            "num_worker": 16,
+            "pin_memory": true,
+            // "non_blocking": true,
+            "prefetch_factor": 8
+        }
+    }
+}

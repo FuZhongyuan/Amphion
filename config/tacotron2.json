@@ -1,0 +1,111 @@
+{
+    "base_config": "config/tts.json",
+    "model_type": "Tacotron2",
+    "task_type": "tts",
+    "dataset": ["LJSpeech"],
+    "preprocess": {
+        // Acoustic features
+        "extract_audio": true,
+        "extract_mel": true,
+        "mel_extract_mode": "taco",
+        "mel_min_max_norm": false,
+        "extract_pitch": false,
+        "extract_uv": false,
+        "extract_energy": false,
+        "extract_duration": false,
+        "use_phone": true,
+        "phone_extractor": "lexicon",
+
+        // Default config
+        "n_mel": 80,
+        "win_size": 1024,
+        "hop_size": 256,
+        "sample_rate": 22050,
+        "n_fft": 1024,
+        "fmin": 0,
+        "fmax": 8000,
+        "raw_data": "raw_data",
+        "text_cleaners": ["english_cleaners"],
+
+        "mel_min_max_stats_dir": "mel_min_max_stats",
+        "spk2id": "spk2id.json",
+        "utt2spk": "utt2spk",
+        "valid_file": "test.json",
+
+        // Features used for model training
+        "use_mel": true,
+        "use_min_max_norm_mel": false,
+        "use_frame_pitch": false,
+        "use_frame_energy": false,
+        "use_spkid": false
+    },
+    "model": {
+        "text_token_num": 512,
+
+        // Encoder settings
+        "encoder": {
+            "symbols_embedding_dim": 512,
+            "encoder_embedding_dim": 512,
+            "encoder_n_convolutions": 3,
+            "encoder_kernel_size": 5
+        },
+
+        // Decoder settings
+        "decoder": {
+            "n_frames_per_step": 1,
+            "decoder_rnn_dim": 1024,
+            "prenet_dim": 256,
+            "max_decoder_steps": 1000,
+            "gate_threshold": 0.5,
+            "p_attention_dropout": 0.1,
+            "p_decoder_dropout": 0.1
+        },
+
+        // Attention settings
+        "attention": {
+            "attention_rnn_dim": 1024,
+            "attention_dim": 128
+        },
+
+        // Location layer settings
+        "location_layer": {
+            "attention_location_n_filters": 32,
+            "attention_location_kernel_size": 31
+        },
+
+        // Postnet settings
+        "postnet": {
+            "postnet_embedding_dim": 512,
+            "postnet_kernel_size": 5,
+            "postnet_n_convolutions": 5
+        }
+    },
+    "train": {
+        "batch_size": 32,
+        "max_epoch": 500,
+        "sort_sample": true,
+        "drop_last": true,
+        "group_size": 4,
+        "grad_clip_thresh": 1.0,
+        "mask_padding": true,
+        "use_guided_attn_loss": true,
+        "guided_sigma": 0.4,
+        "guided_lambda": 1.0,
+        "dataloader": {
+            "num_worker": 8,
+            "pin_memory": true
+        },
+        "lr_scheduler": {
+            "gamma": 0.999
+        },
+        // Optimizer
+        "optimizer": "Adam",
+        "adam": {
+            "lr": 0.001,
+            "betas": [0.9, 0.999],
+            "eps": 0.000001,
+            "weight_decay": 0.000001
+        },
+        "save_format": "bin"
+    }
+}

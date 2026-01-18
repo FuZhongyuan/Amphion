@@ -8,7 +8,7 @@ import numpy as np
 import yaml
 import torchaudio
 
-from models.vc.base.vc_emilia_dataset import VCEmiliaDataset, VCCollator
+from models.vc.base.dataset_factory import get_vc_dataset_class
 from models.codec.kmeans.repcodec_model import RepCodec
 from models.codec.vevo.vevo_repcodec import VevoRepCodec
 
@@ -66,7 +66,7 @@ class VQVAETrainer(BaseTrainer):
                 )
 
     def _build_dataset(self):
-        return VCEmiliaDataset, VCCollator
+        return get_vc_dataset_class(self.cfg)
 
     def _train_step(self, batch):
         train_losses = {}

@@ -1,0 +1,89 @@
+{
+    "model_type": "SemanticToMel",
+    "dataset": {
+        "ljspeech": 1.0
+    },
+    "preprocess": {
+        "dataset_type": "ljspeech",
+        "ljspeech_data_root": "data/LJSpeech-1.1",
+        "ljspeech_cache_path": "data/LJSpeechCache",
+        "hop_size": 320,
+        "sample_rate": 16000,
+        "n_fft": 1024,
+        "win_size": 1024,
+        "n_mel": 80,
+        "fmin": 0,
+        "fmax": 8000,
+        "max_length": 64000,
+        "random_crop": true,
+        "processed_dir": "data/processed_maskgct/ljspeech",
+        "valid_file": "valid.json",
+        "train_file": "train.json",
+        "load_semantic_features": true,
+        "load_mel_spectrogram": true,
+        "use_semantic_cache": true
+    },
+    "model": {
+        "semantic_to_mel": {
+            "hidden_size": 512,
+            "num_layers": 12,
+            "num_heads": 8,
+            "n_mel": 80,
+            "semantic_codebook_size": 512,
+            "cfg_scale": 0.15,
+            "use_acoustic_prompt": true,
+            "acoustic_encoder_layers": 4,
+            "mel_proj_layers": 2,
+            "use_prompt": false,
+            "gradient_checkpointing": true
+        },
+        "semantic_codec": {
+            "codebook_size": 512,
+            "hidden_size": 1024,
+            "codebook_dim": 8,
+            "vocos_dim": 384,
+            "vocos_intermediate_dim": 2048,
+            "vocos_num_layers": 12,
+            "pretrained_path": "ckpts/maskgct_mini/semantic_codec_mini_ljspeech/checkpoint/epoch-1466_step-0300000_loss-12.738006",
+            "representation_stat_mean_var_path": "models/tts/maskgct/ckpt/wav2vec2bert_stats.pt"
+        },
+        "representation_type": "w2v-bert-2.0",
+        "representation_sample_rate": 16000,
+        "use_norm_feat": true
+    },
+    "log_dir": "ckpts/maskgct_mini",
+    "train": {
+        "max_epoch": 0,
+        "use_dynamic_batchsize": false,
+        "max_tokens": 8000000,
+        "max_sentences": 50,
+        "lr_warmup_steps": 5000,
+        "lr_scheduler": "inverse_sqrt",
+        "num_train_steps": 100000,
+        "adam": {
+            "lr": 1e-4,
+            "betas": [0.9, 0.98],
+            "weight_decay": 0.01
+        },
+        "ddp": false,
+        "random_seed": 114,
+        "batch_size": 32,
+        "epochs": 5000,
+        "max_steps": 500000,
+        "total_training_steps": 400000,
+        "save_summary_steps": 500,
+        "save_checkpoints_steps": 2000,
+        "valid_interval": 2000,
+        "keep_checkpoint_max": 50,
+        "gradient_accumulation_step": 1,
+        "tracker": ["tensorboard"],
+        "save_checkpoint_stride": [1],
+        "keep_last": [5],
+        "run_eval": [true],
+        "dataloader": {
+            "num_worker": 8,
+            "pin_memory": true,
+            "prefetch_factor": 4
+        }
+    }
+}

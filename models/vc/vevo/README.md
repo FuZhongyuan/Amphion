@@ -83,7 +83,11 @@ Running this will automatically download the pretrained model from HuggingFace a
 
 For advanced users, we provide the following training recipe:
 
-### Emilia data preparation
+### Dataset Preparation
+
+We support multiple datasets for training. You can choose between **Emilia** and **LJSpeech-1.1** datasets.
+
+#### Option 1: Emilia Dataset
 
 1. Please download the dataset following the official instructions provided by [Emilia](https://huggingface.co/datasets/amphion/Emilia-Dataset).
 
@@ -93,6 +97,22 @@ For advanced users, we provide the following training recipe:
    MNT_PATH = "[Please fill out your emilia data root path]"
    CACHE_PATH = "[Please fill out your emilia cache path]"
    ```
+
+#### Option 2: LJSpeech-1.1 Dataset
+
+1. Download the LJSpeech-1.1 dataset from the [official website](https://keithito.com/LJ-Speech-Dataset/).
+
+2. Extract the dataset. The directory structure should be:
+   ```
+   LJSpeech-1.1/
+   ├── metadata.csv
+   └── wavs/
+       ├── LJ001-0001.wav
+       ├── LJ001-0002.wav
+       └── ...
+   ```
+
+3. Configure the dataset paths in your training configuration file (see Configuration section below).
 
 ### Launch Training
 
@@ -106,6 +126,8 @@ Train the Vevo tokenizers, the auto-regressive model, and the flow-matching mode
 
 #### Tokenizers
 
+**For Emilia Dataset:**
+
 Run the following script:
 
 ```bash
@@ -114,6 +136,49 @@ sh egs/codec/vevo/fvq32.sh
 
 # Content-Style Tokenizer (Vocab = 8192)
 sh egs/codec/vevo/fvq8192.sh
+```
+
+**For LJSpeech-1.1 Dataset:**
+
+Run the following script:
+
+```bash
+# Content Tokenizer (Vocab = 32)
+sh egs/codec/vevo/fvq32_ljspeech.sh
+
+# Content-Style Tokenizer (Vocab = 8192)
+sh egs/codec/vevo/fvq8192_ljspeech.sh
+```
+
+**Configuration:**
+
+Before training, configure your dataset paths in the JSON configuration files:
+
+For **Emilia** dataset (`fvq32.json`, `fvq8192.json`):
+```json
+{
+    "dataset": {
+        "emilia": 1.0
+    },
+    "preprocess": {
+        "dataset_type": "emilia",
+        // Paths are configured in emilia_dataset.py
+    }
+}
+```
+
+For **LJSpeech-1.1** dataset (`fvq32_ljspeech.json`, `fvq8192_ljspeech.json`):
+```json
+{
+    "dataset": {
+        "ljspeech": 1.0
+    },
+    "preprocess": {
+        "dataset_type": "ljspeech",
+        "ljspeech_data_root": "/path/to/LJSpeech-1.1",
+        "ljspeech_cache_path": "/path/to/ljspeech_cache"
+    }
+}
 ```
 
 If you want to try different vocabulary sizes, just specify it in the `egs/codec/vevo/fvq*.json`:
@@ -134,29 +199,66 @@ If you want to try different vocabulary sizes, just specify it in the `egs/codec
 
 #### Auto-regressive Transformer
 
+**For Emilia Dataset:**
+
 Specify the content tokenizer and content-style tokenizer paths in the `egs/vc/AutoregressiveTransformer/ar_conversion.json`:
 
 ```json
 {
+    "dataset": {
+        "emilia": 1.0
+    },
+    "preprocess": {
+        "dataset_type": "emilia",
     ...
+    },
     "model": {
         "input_repcodec": {
             "codebook_size": 32,
-            "hidden_size": 1024, // Representations Dim
+            "hidden_size": 1024,
             "codebook_dim": 8,
             "vocos_dim": 384,
             "vocos_intermediate_dim": 2048,
             "vocos_num_layers": 12,
-            "pretrained_path": "[Please fill out your pretrained model path]/model.safetensors" // The pre-trained content tokenizer
+            "pretrained_path": "[Please fill out your pretrained model path]/model.safetensors"
         },
         "output_repcodec": {
-            "codebook_size": 8192, // VQ Codebook Size
-            "hidden_size": 1024, // Representations Dim
+            "codebook_size": 8192,
+            "hidden_size": 1024,
             "codebook_dim": 8,
             "vocos_dim": 384,
             "vocos_intermediate_dim": 2048,
             "vocos_num_layers": 12,
-            "pretrained_path": "[Please fill out your pretrained model path]/model.safetensors" // The pre-trained content-style tokenizer
+            "pretrained_path": "[Please fill out your pretrained model path]/model.safetensors"
+        }
+    },
+    ...
+}
+```
+
+**For LJSpeech-1.1 Dataset:**
+
+Configure the dataset paths and tokenizer paths:
+
+```json
+{
+    "dataset": {
+        "ljspeech": 1.0
+    },
+    "preprocess": {
+        "dataset_type": "ljspeech",
+        "ljspeech_data_root": "/path/to/LJSpeech-1.1",
+        "ljspeech_cache_path": "/path/to/ljspeech_cache",
+        ...
+    },
+    "model": {
+        "input_repcodec": {
+            "codebook_size": 32,
+            "pretrained_path": "[Your pretrained content tokenizer path]/model.safetensors"
+        },
+        "output_repcodec": {
+            "codebook_size": 8192,
+            "pretrained_path": "[Your pretrained content-style tokenizer path]/model.safetensors"
         }
     },
     ...
@@ -166,6 +268,10 @@ Specify the content tokenizer and content-style tokenizer paths in the `egs/vc/A
 Run the following script:
 
 ```bash
+# For Emilia
+sh egs/vc/AutoregressiveTransformer/ar_conversion.sh
+
+# For LJSpeech-1.1 (modify the config file first)
 sh egs/vc/AutoregressiveTransformer/ar_conversion.sh
 ```
 
@@ -177,20 +283,53 @@ sh egs/vc/AutoregressiveTransformer/ar_synthesis.sh
 
 #### Flow-matching Transformer
 
+**For Emilia Dataset:**
+
 Specify the pre-trained content-style tokenizer path in the `egs/vc/FlowMatchingTransformer/fm_contentstyle.json`:
 
 ```json
 {
+    "dataset": {
+        "emilia": 1.0
+    },
+    "preprocess": {
+        "dataset_type": "emilia",
     ...
+    },
     "model": {
         "repcodec": {
-            "codebook_size": 8192, // VQ Codebook Size
-            "hidden_size": 1024, // Representations Dim
+            "codebook_size": 8192,
+            "hidden_size": 1024,
             "codebook_dim": 8,
             "vocos_dim": 384,
             "vocos_intermediate_dim": 2048,
             "vocos_num_layers": 12,
-            "pretrained_path": "[Please fill out your pretrained model path]/model.safetensors" // The pre-trained content-style tokenizer
+            "pretrained_path": "[Please fill out your pretrained model path]/model.safetensors"
+        }
+    },
+    ...
+}
+```
+
+**For LJSpeech-1.1 Dataset:**
+
+Configure the dataset paths and tokenizer path:
+
+```json
+{
+    "dataset": {
+        "ljspeech": 1.0
+    },
+    "preprocess": {
+        "dataset_type": "ljspeech",
+        "ljspeech_data_root": "/path/to/LJSpeech-1.1",
+        "ljspeech_cache_path": "/path/to/ljspeech_cache",
+        ...
+    },
+    "model": {
+        "repcodec": {
+            "codebook_size": 8192,
+            "pretrained_path": "[Your pretrained content-style tokenizer path]/model.safetensors"
         }
     },
     ...

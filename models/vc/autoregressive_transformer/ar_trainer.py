@@ -17,7 +17,7 @@ from models.codec.melvqgan.melspec import MelSpectrogram
 from models.vc.autoregressive_transformer.ar_model import AutoregressiveTransformer
 from models.codec.kmeans.repcodec_model import RepCodec
 from models.codec.vevo.vevo_repcodec import VevoRepCodec
-from models.vc.base.vc_emilia_dataset import VCEmiliaDataset, VCCollator
+from models.vc.base.dataset_factory import get_vc_dataset_class
 
 import safetensors
 
@@ -258,7 +258,7 @@ class AutoregressiveTransformerTrainer(BaseTrainer):
         return mel_feature
 
     def _build_dataset(self):
-        return VCEmiliaDataset, VCCollator
+        return get_vc_dataset_class(self.cfg)
 
     def _train_step(self, batch):
         train_losses = {}

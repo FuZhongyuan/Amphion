@@ -12,6 +12,7 @@ import argparse
 import json
 import pyworld as pw
 from multiprocessing import cpu_count
+from tqdm import tqdm
 
 
 from utils.util import load_config
@@ -60,7 +61,7 @@ def extract_content_features(dataset, output_path, cfg, dataset_types, num_worke
     """
 
     metadata = []
-    for dataset_type in dataset_types:
+    for dataset_type in tqdm(dataset_types, desc=f"Loading {dataset} metadata"):
         dataset_output = os.path.join(output_path, dataset)
         # dataset_file = os.path.join(dataset_output, "{}.json".format(dataset_type))
         dataset_file = os.path.join(dataset_output, "{}.json".format(dataset_type))
@@ -83,7 +84,7 @@ def extract_phonme_sequences(dataset, output_path, cfg, dataset_types):
     """
 
     metadata = []
-    for dataset_type in dataset_types:
+    for dataset_type in tqdm(dataset_types, desc=f"Loading {dataset} metadata"):
         dataset_output = os.path.join(output_path, dataset)
         dataset_file = os.path.join(dataset_output, "{}.json".format(dataset_type))
         with open(dataset_file, "r") as f:
@@ -103,7 +104,7 @@ def preprocess(cfg, args):
     os.makedirs(output_path, exist_ok=True)
 
     # Split train and test sets
-    for dataset in cfg.dataset:
+    for dataset in tqdm(cfg.dataset, desc="Preprocessing datasets"):
         print("Preprocess {}...".format(dataset))
 
         if args.prepare_alignment:
@@ -150,7 +151,7 @@ def preprocess(cfg, args):
     cal_metadata(cfg, dataset_types)
 
     # Prepare the acoustic features
-    for dataset in cfg.dataset:
+    for dataset in tqdm(cfg.dataset, desc="Extracting acoustic features"):
         # Skip augmented datasets which do not need to extract acoustic features
         # We will copy acoustic features from the original dataset later
         if (
@@ -184,7 +185,7 @@ def preprocess(cfg, args):
             acoustic_extractor.normalize(dataset, cfg.preprocess.energy_dir, cfg)
 
     # Copy acoustic features for augmented datasets by creating soft-links
-    for dataset in cfg.dataset:
+    for dataset in tqdm(cfg.dataset, desc="Copying acoustic features"):
         if "pitch_shift" in dataset:
             src_dataset = dataset.replace("_pitch_shift", "")
             src_dataset_dir = os.path.join(output_path, src_dataset)
@@ -213,7 +214,7 @@ def preprocess(cfg, args):
             acoustic_extractor.cal_pitch_statistics(dataset, output_path, cfg)
 
     # Prepare the content features
-    for dataset in cfg.dataset:
+    for dataset in tqdm(cfg.dataset, desc="Extracting content features"):
         print("Extracting content features for {}...".format(dataset))
         extract_content_features(
             dataset, output_path, cfg, dataset_types, args.num_workers
@@ -221,7 +222,7 @@ def preprocess(cfg, args):
 
     # Prepare the phenome squences
     if cfg.preprocess.extract_phone:
-        for dataset in cfg.dataset:
+        for dataset in tqdm(cfg.dataset, desc="Extracting phoneme sequences"):
             print("Extracting phoneme sequence for {}...".format(dataset))
             extract_phonme_sequences(dataset, output_path, cfg, dataset_types)
 

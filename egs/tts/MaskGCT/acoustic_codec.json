@@ -1,0 +1,89 @@
+{
+    "model_type": "AcousticCodec",  // 模型类型：声学编解码器
+    "dataset": {
+        "libritts": 1.0  // 数据集权重：LibriTTS数据集权重为1.0
+    },
+    "preprocess": {
+        "dataset_type": "libritts",  // 数据集类型：LibriTTS语音数据集
+        "libritts_data_root": "/mnt/storage/fuzhongyuan_space/fzy_project/Amphion/data/LibriTTS",
+        "libritts_cache_path": "/mnt/storage/fuzhongyuan_space/fzy_project/Amphion/data/LibriTTSCache",
+        "hop_size": 320,  // 跳跃大小：STFT的跳跃长度
+        "sample_rate": 24000,  // 采样率：音频采样频率为24kHz
+        "max_length": 192000,  // 最大长度：音频最大长度（样本数）
+        "random_crop": true,  // 随机裁剪：是否启用随机裁剪
+        "processed_dir": "",  // 处理后目录：预处理后数据的存储目录
+        "valid_file": "valid.json",  // 验证文件：验证集文件路径
+        "train_file": "train.json"  // 训练文件：训练集文件路径
+    },
+    "model": {
+        "acoustic_codec": {
+            "encoder": {
+                "d_model": 96,  // 模型维度：编码器隐藏层维度
+                "up_ratios": [3, 4, 5, 8],  // 上采样比率：编码器的上采样倍数列表
+                "out_channels": 256,  // 输出通道数：编码器输出通道数
+                "use_tanh": false  // 使用Tanh：是否在编码器输出使用Tanh激活
+            },
+            "decoder": {
+                "in_channels": 256,  // 输入通道数：解码器输入通道数
+                "upsample_initial_channel": 1536,  // 上采样初始通道数：解码器初始上采样通道数
+                "up_ratios": [8, 5, 4, 3],  // 上采样比率：解码器的上采样倍数列表
+                "num_quantizers": 12,  // 量化器数量：残差向量量化器的数量
+                "codebook_size": 1024,  // 码本大小：每个量化器的码本大小
+                "codebook_dim": 8,  // 码本维度：码本向量的维度
+                "quantizer_type": "fvq",  // 量化器类型：量化器类型（fvq表示finite vector quantization）
+                "quantizer_dropout": 0.5,  // 量化器dropout：量化器dropout率
+                "commitment": 0.25,  // 承诺损失权重：VQ-VAE的承诺损失权重
+                "codebook_loss_weight": 1.0,  // 码本损失权重：码本损失的权重
+                "use_l2_normlize": true,  // L2归一化：是否对码本使用L2归一化
+                "codebook_type": "euclidean",  // 码本类型：码本距离度量类型
+                "kmeans_init": false,  // K-means初始化：是否使用K-means初始化码本
+                "kmeans_iters": 10,  // K-means迭代次数：K-means初始化的迭代次数
+                "decay": 0.8,  // 衰减率：EMA更新的衰减率
+                "eps": 0.5,  // epsilon：数值稳定性参数
+                "threshold_ema_dead_code": 2,  // EMA死码阈值：EMA中死码的阈值
+                "weight_init": false,  // 权重初始化：是否使用预训练权重初始化
+                "use_vocos": true,  // 使用VocOS：是否使用VocOS vocoder
+                "vocos_dim": 512,  // VocOS维度：VocOS的隐藏维度
+                "vocos_intermediate_dim": 4096,  // VocOS中间维度：VocOS的中间层维度
+                "vocos_num_layers": 30,  // VocOS层数：VocOS的层数
+                "n_fft": 1920,  // FFT大小：STFT的FFT窗口大小
+                "hop_size": 480,  // 跳跃大小：STFT的跳跃长度
+                "padding": "same",  // 填充模式：卷积填充模式
+                "rec_loss_weight": 1.0  // 重构损失权重：重构损失的权重
+            }
+        }
+    },
+    "log_dir": "ckpts/maskgct",  // 日志目录：模型检查点和日志保存目录
+    "train": {
+        "max_epoch": 0,  // 最大epoch数：训练的最大epoch数（0表示使用steps控制）
+        "use_dynamic_batchsize": false,  // 动态批大小：是否使用动态批大小
+        "max_tokens": 16000000,  // 最大token数：批次中最大token数量
+        "max_sentences": 200,  // 最大句子数：批次中最大句子数量
+        "lr_warmup_steps": 10000,  // 学习率预热步数：学习率预热阶段的步数
+        "lr_scheduler": "constant",  // 学习率调度器：学习率调度器类型
+        "num_train_steps": 100000,  // 训练步数：总训练步数
+        "adam": {
+            "lr": 1e-4,  // 学习率：Adam优化器的学习率
+            "betas": [0.5, 0.9]  // Beta参数：Adam的beta1和beta2参数
+        },
+        "ddp": false,  // 分布式数据并行：是否使用DDP训练
+        "random_seed": 114,  // 随机种子：训练的随机种子
+        "batch_size": 32,  // 批大小：训练批大小
+        "epochs": 5000,  // 训练epoch数：总训练epoch数
+        "max_steps": 1000000,  // 最大步数：训练的最大步数
+        "total_training_steps": 800000,  // 总训练步数：完整的训练步数
+        "save_summary_steps": 500,  // 保存摘要步数：每多少步保存训练摘要
+        "save_checkpoints_steps": 2000,  // 保存检查点步数：每多少步保存模型检查点
+        "valid_interval": 2000,  // 验证间隔：每多少步进行一次验证
+        "keep_checkpoint_max": 100,  // 最大检查点数：保留的最大检查点数量
+        "gradient_accumulation_step": 1,  // 梯度累积步数：梯度累积的步数
+        "tracker": ["tensorboard"],  // 跟踪器：使用的实验跟踪工具
+        "save_checkpoint_stride": [1],  // 保存检查点步长：保存检查点的步长列表
+        "keep_last": [10],  // 保留最新：保留的最新检查点数量
+        "run_eval": [true],  // 运行评估：是否在训练中运行评估
+        "dataloader": {
+            "num_worker": 16,  // 工作进程数：数据加载器的工作进程数
+            "pin_memory": true  // 固定内存：是否将数据固定在CUDA内存中
+        }
+    }
+}

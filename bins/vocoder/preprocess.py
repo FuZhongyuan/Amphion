@@ -12,6 +12,7 @@ import argparse
 import json
 import pyworld as pw
 from multiprocessing import cpu_count
+from tqdm import tqdm
 
 
 from utils.util import load_config
@@ -31,7 +32,7 @@ def extract_acoustic_features(dataset, output_path, cfg, n_workers=1):
     """
     types = ["train", "test"] if "eval" not in dataset else ["test"]
     metadata = []
-    for dataset_type in types:
+    for dataset_type in tqdm(types, desc=f"Loading {dataset} metadata"):
         dataset_output = os.path.join(output_path, dataset)
         dataset_file = os.path.join(dataset_output, "{}.json".format(dataset_type))
         with open(dataset_file, "r") as f:
@@ -54,7 +55,7 @@ def preprocess(cfg, args):
     os.makedirs(output_path, exist_ok=True)
 
     ## Split train and test sets
-    for dataset in cfg.dataset:
+    for dataset in tqdm(cfg.dataset, desc="Preprocessing datasets"):
         print("Preprocess {}...".format(dataset))
 
         preprocess_dataset(
@@ -85,7 +86,7 @@ def preprocess(cfg, args):
     cal_metadata(cfg)
 
     ## Prepare the acoustic features
-    for dataset in cfg.dataset:
+    for dataset in tqdm(cfg.dataset, desc="Extracting acoustic features"):
         # Skip augmented datasets which do not need to extract acoustic features
         # We will copy acoustic features from the original dataset later
         if (
@@ -105,7 +106,7 @@ def preprocess(cfg, args):
             acoustic_extractor.cal_mel_min_max(dataset, output_path, cfg)
 
     # Copy acoustic features for augmented datasets by creating soft-links
-    for dataset in cfg.dataset:
+    for dataset in tqdm(cfg.dataset, desc="Copying acoustic features"):
         if "pitch_shift" in dataset:
             src_dataset = dataset.replace("_pitch_shift", "")
             src_dataset_dir = os.path.join(output_path, src_dataset)

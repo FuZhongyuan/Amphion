@@ -1,0 +1,23 @@
+{
+    "base_config": "config/tacotron2.json",
+    "model_type": "Tacotron2",
+    "dataset": [
+        "LibriTTS"
+    ],
+    "dataset_path": {
+        // TODO: Fill in your dataset path
+        "LibriTTS": "data/LibriTTS"
+    },
+    // TODO: Fill in the output log path
+    "log_dir": "ckpts/tts",
+    "preprocess": {
+        // TODO: Fill in the output data path
+        "processed_dir": "data",
+        "sample_rate": 24000
+    },
+    "train": {
+        "batch_size": 32,
+        "max_epoch": 500,
+        "multi_speaker_training": true
+    }
+}

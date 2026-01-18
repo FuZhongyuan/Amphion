@@ -12,6 +12,7 @@ import pickle
 import os
 from pathlib import Path
 import random
+from tqdm import tqdm
 
 
 class WarningFilter(logging.Filter):
@@ -85,9 +86,9 @@ class EmiliaDataset(torch.utils.data.Dataset):
                 and os.path.exists(self.phone_count_cache)
             ):
                 self.load_cached_paths()
-        else:
-            logger.info("Incorrect cache loading way")
-            exit()
+            else:
+                logger.info("Incorrect cache loading way")
+                exit()
 
         if cache_type == "meta":
             if os.path.exists(self.json_path2meta_cache):
@@ -107,6 +108,9 @@ class EmiliaDataset(torch.utils.data.Dataset):
             self.duration_setting["min"] = self.cfg.preprocess.min_dur
         if hasattr(self.cfg.preprocess, "max_dur"):
             self.duration_setting["max"] = self.cfg.preprocess.max_dur
+            
+    def g2p(self, text, language):
+        pass
 
     def load_cached_paths(self):
         logger.info("Loaded paths from cache files")
@@ -153,8 +157,10 @@ class EmiliaDataset(torch.utils.data.Dataset):
         # Calculate the number of frames
         if self.cache_type == "path":
             self.index2num_frames = []
-            for duration, phone_count in zip(
-                self.wav_path_index2duration, self.wav_path_index2phonelen
+            for duration, phone_count in tqdm(
+                zip(self.wav_path_index2duration, self.wav_path_index2phonelen),
+                desc="Calculating frame indices",
+                total=len(self.wav_path_index2duration)
             ):
                 self.index2num_frames.append(duration * 50 + phone_count)
 
@@ -189,10 +195,10 @@ class EmiliaDataset(torch.utils.data.Dataset):
             new_meta["0"] = meta[0]
             return new_meta
         text_list = []
-        for i in idx_list:
+        for i in tqdm(idx_list, desc="Collecting texts", leave=False):
             text_list.append(meta[i]["text"])
         token_id = self.g2p(text_list, meta[0]["language"])[1]
-        for i, token in zip(idx_list, token_id):
+        for i, token in tqdm(zip(idx_list, token_id), desc="Processing tokens", leave=False, total=len(idx_list)):
             nm = {}
             nm["language"] = meta[i]["language"]
             nm["phone_id"] = token
@@ -206,7 +212,7 @@ class EmiliaDataset(torch.utils.data.Dataset):
     def load_path2meta(self):
         logger.info("Loaded meta from cache files")
         self.json_path2meta = pickle.load(open(self.json_path2meta_cache, "rb"))
-        for path in self.wav_paths:
+        for path in tqdm(self.wav_paths, desc="Loading path2meta"):
             duration = self.get_meta_from_wav_path(path)["duration"]
             phone_count = self.get_meta_from_wav_path(path)["phone_count"]
             self.wav_path_index2duration.append(duration)

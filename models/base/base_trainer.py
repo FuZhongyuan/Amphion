@@ -391,13 +391,24 @@ class BaseTrainer:
         if self.cfg.train.use_dynamic_batchsize:
             print("Use Dynamic Batchsize......")
             Dataset, Collator = self._build_dataset()
-            if (
+            # Check if using new dataset factory pattern (libritts, ljspeech, etc.)
+            use_factory_pattern = (
+                hasattr(self.cfg.preprocess, "dataset_type")
+                and self.cfg.preprocess.dataset_type in ["libritts", "ljspeech"]
+            ) or (
                 hasattr(self.cfg.train, "use_emilia_dataset")
                 and self.cfg.train.use_emilia_dataset
-            ):
+            )
+            
+            if use_factory_pattern:
                 train_dataset = Dataset(cfg=self.cfg)
             else:
-                train_dataset = Dataset(self.cfg, self.cfg.dataset[0], is_valid=False)
+                # Legacy pattern: assume dataset is a list
+                if isinstance(self.cfg.dataset, (list, tuple)):
+                    train_dataset = Dataset(cfg=self.cfg, dataset=self.cfg.dataset[0], is_valid=False)
+                else:
+                    # If dataset is dict, try to use first key or use factory pattern
+                    train_dataset = Dataset(cfg=self.cfg)
             train_collate = Collator(self.cfg)
 
             t = time.time()
@@ -451,13 +462,24 @@ class BaseTrainer:
         else:
             print("Use Normal Batchsize......")
             Dataset, Collator = self._build_dataset()
-            if (
+            # Check if using new dataset factory pattern (libritts, ljspeech, etc.)
+            use_factory_pattern = (
+                hasattr(self.cfg.preprocess, "dataset_type")
+                and self.cfg.preprocess.dataset_type in ["libritts", "ljspeech"]
+            ) or (
                 hasattr(self.cfg.train, "use_emilia_dataset")
                 and self.cfg.train.use_emilia_dataset
-            ):
+            )
+            
+            if use_factory_pattern:
                 train_dataset = Dataset(cfg=self.cfg)
             else:
-                train_dataset = Dataset(self.cfg, self.cfg.dataset[0], is_valid=False)
+                # Legacy pattern: assume dataset is a list
+                if isinstance(self.cfg.dataset, (list, tuple)):
+                    train_dataset = Dataset(self.cfg, self.cfg.dataset[0], is_valid=False)
+                else:
+                    # If dataset is dict, try to use first key or use factory pattern
+                    train_dataset = Dataset(cfg=self.cfg)
             train_collate = Collator(self.cfg)
 
             train_loader = DataLoader(

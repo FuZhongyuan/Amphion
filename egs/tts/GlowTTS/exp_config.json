@@ -1,0 +1,20 @@
+{
+    "base_config": "config/glowtts.json",
+    "model_type": "GlowTTS",
+    "dataset": [
+        "LJSpeech"
+    ],
+    "dataset_path": {
+        "LJSpeech": "data/LJSpeech-1.1"
+    },
+    "log_dir": "ckpts/glowtts",
+    "preprocess": {
+    // TODO: Fill in the output data path. The default value is "Amphion/data"
+    "processed_dir": "data/processed/ljspeech_processed",
+    "sample_rate": 22050
+  },
+  "train": {
+    "batch_size": 32,
+    "max_epoch": 500
+  }
+}

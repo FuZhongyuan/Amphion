@@ -10,7 +10,7 @@ import math
 import torch.nn.functional as F
 import torchaudio
 from models.base.base_trainer import BaseTrainer
-from models.vc.base.vc_emilia_dataset import VCEmiliaDataset, VCCollator
+from models.vc.base.dataset_factory import get_vc_dataset_class
 from models.codec.melvqgan.melspec import MelSpectrogram
 from models.vc.flow_matching_transformer.fmt_model import FlowMatchingTransformer
 from models.codec.kmeans.repcodec_model import RepCodec
@@ -124,8 +124,13 @@ class FlowMatchingTransformerTrainer(BaseTrainer):
             self.vqvae.to(self.accelerator.device)
 
     def _build_dataset(self):
-        assert self.cfg.train.use_emilia_dataset
-        return VCEmiliaDataset, VCCollator
+        # For backward compatibility, check use_emilia_dataset flag
+        # But prefer dataset_type in preprocess config
+        if hasattr(self.cfg.train, "use_emilia_dataset") and self.cfg.train.use_emilia_dataset:
+            if not hasattr(self.cfg.preprocess, "dataset_type"):
+                # Set default dataset type if not specified
+                self.cfg.preprocess.dataset_type = "emilia"
+        return get_vc_dataset_class(self.cfg)
 
     def _train_step(self, batch):
         train_losses = {}

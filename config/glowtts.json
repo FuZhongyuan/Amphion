@@ -1,0 +1,106 @@
+{
+    "base_config": "config/tts.json",
+    "model_type": "GlowTTS",
+    "task_type": "tts",
+    "dataset": ["LJSpeech"],
+    "preprocess": {
+        // Acoustic features
+        "extract_audio": true,
+        "extract_mel": true,
+        "mel_extract_mode": "taco",
+        "mel_min_max_norm": false,
+        "extract_pitch": false,
+        "extract_energy": false,
+        "extract_duration": false,
+
+        // Phone extraction
+        "use_phone": true,
+        "use_text": false,
+        "phone_extractor": "lexicon",
+
+        // Audio parameters
+        "n_mel": 80,
+        "win_size": 1024,
+        "hop_size": 256,
+        "sample_rate": 22050,
+        "n_fft": 1024,
+        "fmin": 0,
+        "fmax": 8000,
+
+        // Text processing
+        "text_cleaners": ["english_cleaners"],
+
+        // Feature flags
+        "use_mel": true,
+        "use_min_max_norm_mel": false,
+        "use_spkid": false,
+        "use_frame_pitch": false,
+        "use_frame_energy": false,
+
+        // File settings
+        "valid_file": "test.json"
+    },
+    "model": {
+        "glowtts": {
+            // Encoder parameters
+            "hidden_channels": 192,
+            "filter_channels": 768,
+            "filter_channels_dp": 256,
+            "n_heads": 2,
+            "n_layers_enc": 6,
+            "kernel_size": 3,
+            "p_dropout": 0.1,
+            "window_size": 4,
+            "block_length": null,
+            "mean_only": true,
+            "prenet": true,
+
+            // Decoder parameters
+            "hidden_channels_dec": 192,
+            "n_blocks_dec": 12,
+            "kernel_size_dec": 5,
+            "dilation_rate": 1,
+            "n_block_layers": 4,
+            "p_dropout_dec": 0.05,
+            "n_split": 4,
+            "n_sqz": 2,
+            "sigmoid_scale": false,
+
+            // Multi-speaker (set n_speakers > 1 for multi-speaker)
+            "n_speakers": 1,
+            "gin_channels": 0
+        }
+    },
+    "train":{
+        "batch_size": 32,
+        "max_epoch": 500,
+        "sort_sample": true,
+        "drop_last": true,
+        "group_size": 4,
+        "grad_clip_thresh": 1.0,
+        "ddp": false,
+        "gradient_accumulation_step": 1,
+        // DDI (Data-Dependent Initialization) for ActNorm
+        "ddi": true,
+        // Noise augmentation for mel spectrogram
+        "add_noise": true,
+        "noise_scale": 1.0,
+        "dataloader": {
+          "num_worker": 8,
+          "pin_memory": true
+        },
+        "lr_scheduler":{
+          "num_warmup": 4000
+        },
+        // LR Scheduler
+        "scheduler": "NoamLR",
+        // Optimizer
+        "optimizer": "Adam",
+        "adam": {
+          "lr": 0.001,
+          "betas": [0.9, 0.98],
+          "eps": 0.000000001,
+          "weight_decay": 0.0
+        },
+      }
+}

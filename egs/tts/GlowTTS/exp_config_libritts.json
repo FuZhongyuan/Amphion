@@ -1,0 +1,28 @@
+{
+    "base_config": "config/glowtts.json",
+    "model_type": "GlowTTS",
+    "dataset": ["LibriTTS"],
+    "dataset_path": {
+        "LibriTTS": "data/LibriTTS"
+    },
+    "preprocess": {
+        "processed_dir": "data/processed/libritts",
+        "sample_rate": 24000,
+        "n_fft": 1024,
+        "win_size": 1024,
+        "hop_size": 256,
+        "fmin": 0,
+        "fmax": 12000,
+        "use_spkid": true
+    },
+    "model": {
+        "glowtts": {
+            "n_speakers": 100,
+            "gin_channels": 256
+        }
+    },
+    "train": {
+        "multi_speaker_training": true
+    },
+    "log_dir": "ckpts/tts"
+}
