@@ -12,7 +12,7 @@ export PYTHONIOENCODING=UTF-8
 
 ######## Set Experiment Configuration ###########
 exp_config="$exp_dir/s2mel_dit_mini.json"
-exp_name="s2mel_dit_mini_ljspeech"
+exp_name="s2mel_dit_mini"
 # export CUDA_LAUNCH_BLOCKING=1
 
 # Check if checkpoint exists for resume training
@@ -26,7 +26,7 @@ else
 fi
 
 ####### Train Model ###########
-CUDA_VISIBLE_DEVICES="0,1,2,3" accelerate launch --main_process_port 18293 --mixed_precision="bf16" \
+CUDA_VISIBLE_DEVICES="1,2" accelerate launch --main_process_port 18293 --mixed_precision="bf16" \
     "${work_dir}"/bins/tts/maskgct_train.py \
     --config=$exp_config \
     --exp_name=$exp_name \

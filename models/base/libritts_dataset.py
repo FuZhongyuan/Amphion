@@ -434,25 +434,48 @@ class LibriTTSDataset(torch.utils.data.Dataset):
         with open(self.wav_id2meta_cache, "rb") as f:
             all_wav_id2meta = pickle.load(f)
         
-        # Select part of data according to libritts_ratio
+        # First, apply libritts_ratio if needed
         if self.libritts_ratio < 1.0:
             total_samples = len(all_wav_paths)
             num_samples = int(total_samples * self.libritts_ratio)
-            selected_indices = random.sample(range(total_samples), num_samples)
-            self.wav_paths = [all_wav_paths[i] for i in selected_indices]
+            # Use fixed seed for reproducibility
+            rng = random.Random(self.cfg.train.random_seed)
+            selected_indices = rng.sample(range(total_samples), num_samples)
+            selected_indices.sort()  # Keep order for consistency
+            all_wav_paths = [all_wav_paths[i] for i in selected_indices]
+        
+        # Then, split into train/valid sets
+        total_samples = len(all_wav_paths)
+        num_valid = int(total_samples * self.valid_split_ratio)
+        
+        # Use fixed seed for reproducibility
+        rng = random.Random(self.cfg.train.random_seed)
+        all_indices = list(range(total_samples))
+        rng.shuffle(all_indices)
+        
+        if self.is_valid:
+            # Use first num_valid samples for validation
+            selected_indices = all_indices[:num_valid]
+            split_name = "validation"
         else:
-            assert self.libritts_ratio == 1.0
-            self.wav_paths = all_wav_paths
+            # Use remaining samples for training
+            selected_indices = all_indices[num_valid:]
+            split_name = "training"
+        
+        selected_indices.sort()  # Keep order for consistency
+        
+        # Select data based on split
+        self.wav_paths = [all_wav_paths[i] for i in selected_indices]
         
         # Build wav_id2meta for selected samples
         self.wav_id2meta = {}
-        for path in tqdm(self.wav_paths, desc="Loading meta from paths"):
+        for path in tqdm(self.wav_paths, desc=f"Loading {split_name} meta from paths"):
             wav_id = os.path.basename(path).replace(".wav", "")
             if wav_id in all_wav_id2meta:
                 self.wav_id2meta[wav_id] = all_wav_id2meta[wav_id]
         
         # Build index mappings
-        for path in tqdm(self.wav_paths, desc="Building index mappings"):
+        for path in tqdm(self.wav_paths, desc=f"Building {split_name} index mappings"):
             wav_id = os.path.basename(path).replace(".wav", "")
             if wav_id in self.wav_id2meta:
                 meta = self.wav_id2meta[wav_id]
@@ -461,6 +484,9 @@ class LibriTTSDataset(torch.utils.data.Dataset):
                 self.wav_path_index2duration.append(duration)
                 self.wav_path_index2phonelen.append(phone_count)
                 self.index2num_frames.append(duration * 50)
+        
+        logger.info(f"LibriTTS {split_name} set loaded successfully, ratio: {self.libritts_ratio:.2f}")
+        logger.info(f"Number of {split_name} samples: {len(self.wav_paths)}")
 
     def get_meta_from_wav_path(self, wav_path):
         """Get metadata from wav path"""

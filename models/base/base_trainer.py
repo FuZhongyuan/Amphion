@@ -137,6 +137,7 @@ class BaseTrainer:
 
         # Calculate steps per epoch for progress display (will be updated after dataloader creation)
         self.steps_per_epoch = 0
+        self.valid_steps_per_epoch = 0
         if self.accelerator.is_main_process:
             self.logger.info(
                 "Max epoch: {}".format(
@@ -218,7 +219,10 @@ class BaseTrainer:
 
         # Calculate steps per epoch for progress display (after accelerator prepare)
         self.steps_per_epoch = len(self.train_dataloader) // self.cfg.train.gradient_accumulation_step
-
+        if self.valid_dataloader is not None:
+            self.valid_steps_per_epoch = len(self.valid_dataloader) // self.cfg.train.gradient_accumulation_step
+        else:
+            self.valid_steps_per_epoch = 0
         if isinstance(self.model, dict):
             for key in self.model.keys():
                 self.model[key] = self.accelerator.prepare(self.model[key])
@@ -483,14 +487,45 @@ class BaseTrainer:
                     valid_collate = Collator(self.cfg)
                     
                     if len(valid_dataset) > 0:
+                        # Use dynamic batch size for validation as well
+                        t_valid = time.time()
+                        if self.accelerator.is_main_process:
+                            print("Start batching validation dataset...")
+                        
+                        valid_batch_sampler = batch_by_size(
+                            valid_dataset.num_frame_indices,
+                            valid_dataset.get_num_frames,
+                            max_tokens=self.cfg.train.max_tokens * self.accelerator.num_processes,
+                            max_sentences=self.cfg.train.max_sentences * self.accelerator.num_processes,
+                            required_batch_size_multiple=self.accelerator.num_processes,
+                        )
+                        
+                        if self.accelerator.is_main_process:
+                            info = "Time taken to batch validation: {:.1f}s, #batches = {}".format(
+                                time.time() - t_valid, len(valid_batch_sampler)
+                            )
+                            print(info)
+                            self.logger.info(info)
+                        
+                        valid_batches = [
+                            x[
+                                self.accelerator.local_process_index :: self.accelerator.num_processes
+                            ]
+                            for x in valid_batch_sampler
+                            if len(x) % self.accelerator.num_processes == 0
+                        ]
+                        
                         valid_loader = DataLoader(
                             valid_dataset,
                             collate_fn=valid_collate,
-                            batch_size=self.cfg.train.batch_size,
                             num_workers=self.cfg.train.dataloader.num_worker,
+                            batch_sampler=VariableSampler(
+                                valid_batches, drop_last=False, use_random_sampler=False
+                            ),
                             pin_memory=self.cfg.train.dataloader.pin_memory,
-                            shuffle=False,
+                            prefetch_factor=self.cfg.train.dataloader.prefetch_factor
                         )
+                        
                         if self.accelerator.is_main_process:
                             print(f"Validation dataset built successfully with {len(valid_dataset)} samples")
                     else:
@@ -921,14 +956,78 @@ class BaseTrainer:
             )
         self.accelerator.end_training()
 
+    def _valid_epoch(self):
+        """Validation epoch for T2S model.
+
+        Aggregates losses and stats across all validation batches.
+        """
+        self.model.eval()
+
+        epoch_sum_loss = 0.0
+        epoch_losses = {}
+        epoch_stats = {}
+        num_batches = 0
+
+        for batch in self.valid_dataloader:
+            # Put the data to cuda device
+            device = self.accelerator.device
+            for k, v in batch.items():
+                if isinstance(v, torch.Tensor):
+                    batch[k] = v.to(device)
+
+            total_loss, valid_losses, valid_stats = self._valid_step(batch)
+            epoch_sum_loss += total_loss
+            num_batches += 1
+            if (
+                self.accelerator.is_main_process
+                and num_batches
+                % (10 * self.cfg.train.gradient_accumulation_step)
+                == 0
+            ):
+                self.echo_log(valid_losses, mode="Validing")
+            # Aggregate losses
+            if isinstance(valid_losses, dict):
+                for key, value in valid_losses.items():
+                    if key not in epoch_losses:
+                        epoch_losses[key] = value
+                    else:
+                        epoch_losses[key] += value
+
+            # Aggregate stats
+            if isinstance(valid_stats, dict):
+                for key, value in valid_stats.items():
+                    if key not in epoch_stats:
+                        epoch_stats[key] = value
+                    else:
+                        epoch_stats[key] += value
+
+        # Average over batches
+        if num_batches > 0:
+            epoch_sum_loss = epoch_sum_loss / num_batches
+            for key in epoch_losses:
+                epoch_losses[key] = epoch_losses[key] / num_batches
+            for key in epoch_stats:
+                epoch_losses[key] = epoch_stats[key] / num_batches  # Add stats to losses for logging
+
+        self.accelerator.wait_for_everyone()
+
+        return epoch_sum_loss, epoch_losses
+
     def echo_log(self, losses, mode="Training"):
         max_epoch_display = "∞" if self.max_epoch == float("inf") else str(int(self.max_epoch))
-        message = [
-            "{} - Epoch {} / {} (Step {} / {}): [{:.5f} s/step]".format(
-                mode, self.epoch + 1, max_epoch_display, self.step, self.steps_per_epoch, self.time_window.average
-            )
-        ]
-
+        if mode == "Training":
+            message = [
+                "{} - Epoch {} / {} (Step {} / {}): [{:.5f} s/step]".format(
+                    mode, self.epoch + 1, max_epoch_display, self.step, self.steps_per_epoch, self.time_window.average
+                )
+            ]
+        else:
+            message = [
+                "{} - Epoch {} / {} (Step {} / {}): [{:.5f} s/step]".format(
+                    mode, self.epoch + 1, max_epoch_display, self.step, self.valid_steps_per_epoch, self.time_window.average
+                )
+            ]
+        # print(self.valid_steps_per_epoch)
         for key in sorted(losses.keys()):
             if isinstance(losses[key], dict):
                 for k, v in losses[key].items():

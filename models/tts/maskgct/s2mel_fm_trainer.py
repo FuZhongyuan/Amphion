@@ -273,31 +273,41 @@ class S2MelFMTrainer(BaseTrainer):
 
         return (total_loss.item(), valid_losses, valid_stats)
 
-    def _valid_epoch(self):
-        """Validation epoch."""
-        self.model.eval()
+    # def _valid_epoch(self):
+    #     """Validation epoch."""
+    #     self.model.eval()
 
-        epoch_sum_loss = 0.0
-        epoch_losses = {}
-        for batch in self.valid_dataloader:
-            device = self.accelerator.device
-            for k, v in batch.items():
-                if isinstance(v, torch.Tensor):
-                    batch[k] = v.to(device)
+    #     epoch_sum_loss = 0.0
+    #     val_batch_count = 0
+    #     epoch_losses = {}
+    #     for batch in self.valid_dataloader:
+    #         device = self.accelerator.device
+    #         for k, v in batch.items():
+    #             if isinstance(v, torch.Tensor):
+    #                 batch[k] = v.to(device)
 
-            total_loss, valid_losses, valid_stats = self._valid_step(batch)
-            epoch_sum_loss += total_loss
-            if isinstance(valid_losses, dict):
-                for key, value in valid_losses.items():
-                    if key not in epoch_losses:
-                        epoch_losses[key] = value
-                    else:
-                        epoch_losses[key] += value
+    #         total_loss, valid_losses, valid_stats = self._valid_step(batch)
+    #         val_batch_count += 1
+    #         if (
+    #             self.accelerator.is_main_process
+    #             and val_batch_count
+    #             % (10 * self.cfg.train.gradient_accumulation_step)
+    #             == 0
+    #         ):
+    #             self.echo_log(valid_losses, mode="Validing")
+            
+    #         epoch_sum_loss += total_loss
+    #         if isinstance(valid_losses, dict):
+    #             for key, value in valid_losses.items():
+    #                 if key not in epoch_losses:
+    #                     epoch_losses[key] = value
+    #                 else:
+    #                     epoch_losses[key] += value
 
-        epoch_sum_loss = epoch_sum_loss / len(self.valid_dataloader)
-        for key in epoch_losses:
-            epoch_losses[key] = epoch_losses[key] / len(self.valid_dataloader)
+    #     epoch_sum_loss = epoch_sum_loss / len(self.valid_dataloader)
+    #     for key in epoch_losses:
+    #         epoch_losses[key] = epoch_losses[key] / len(self.valid_dataloader)
 
-        self.accelerator.wait_for_everyone()
+    #     self.accelerator.wait_for_everyone()
 
-        return epoch_sum_loss, epoch_losses
+    #     return epoch_sum_loss, epoch_losses

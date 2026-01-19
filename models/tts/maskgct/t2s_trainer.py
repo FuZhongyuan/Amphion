@@ -401,54 +401,54 @@ class T2STrainer(BaseTrainer):
 
         return (total_loss.item(), valid_losses, valid_stats)
 
-    def _valid_epoch(self):
-        """Validation epoch for T2S model.
+    # def _valid_epoch(self):
+    #     """Validation epoch for T2S model.
 
-        Aggregates losses and stats across all validation batches.
-        """
-        self.model.eval()
+    #     Aggregates losses and stats across all validation batches.
+    #     """
+    #     self.model.eval()
 
-        epoch_sum_loss = 0.0
-        epoch_losses = {}
-        epoch_stats = {}
-        num_batches = 0
+    #     epoch_sum_loss = 0.0
+    #     epoch_losses = {}
+    #     epoch_stats = {}
+    #     num_batches = 0
 
-        for batch in self.valid_dataloader:
-            # Put the data to cuda device
-            device = self.accelerator.device
-            for k, v in batch.items():
-                if isinstance(v, torch.Tensor):
-                    batch[k] = v.to(device)
+    #     for batch in self.valid_dataloader:
+    #         # Put the data to cuda device
+    #         device = self.accelerator.device
+    #         for k, v in batch.items():
+    #             if isinstance(v, torch.Tensor):
+    #                 batch[k] = v.to(device)
 
-            total_loss, valid_losses, valid_stats = self._valid_step(batch)
-            epoch_sum_loss += total_loss
-            num_batches += 1
+    #         total_loss, valid_losses, valid_stats = self._valid_step(batch)
+    #         epoch_sum_loss += total_loss
+    #         num_batches += 1
 
-            # Aggregate losses
-            if isinstance(valid_losses, dict):
-                for key, value in valid_losses.items():
-                    if key not in epoch_losses:
-                        epoch_losses[key] = value
-                    else:
-                        epoch_losses[key] += value
+    #         # Aggregate losses
+    #         if isinstance(valid_losses, dict):
+    #             for key, value in valid_losses.items():
+    #                 if key not in epoch_losses:
+    #                     epoch_losses[key] = value
+    #                 else:
+    #                     epoch_losses[key] += value
 
-            # Aggregate stats
-            if isinstance(valid_stats, dict):
-                for key, value in valid_stats.items():
-                    if key not in epoch_stats:
-                        epoch_stats[key] = value
-                    else:
-                        epoch_stats[key] += value
+    #         # Aggregate stats
+    #         if isinstance(valid_stats, dict):
+    #             for key, value in valid_stats.items():
+    #                 if key not in epoch_stats:
+    #                     epoch_stats[key] = value
+    #                 else:
+    #                     epoch_stats[key] += value
 
-        # Average over batches
-        if num_batches > 0:
-            epoch_sum_loss = epoch_sum_loss / num_batches
-            for key in epoch_losses:
-                epoch_losses[key] = epoch_losses[key] / num_batches
-            for key in epoch_stats:
-                epoch_losses[key] = epoch_stats[key] / num_batches  # Add stats to losses for logging
+    #     # Average over batches
+    #     if num_batches > 0:
+    #         epoch_sum_loss = epoch_sum_loss / num_batches
+    #         for key in epoch_losses:
+    #             epoch_losses[key] = epoch_losses[key] / num_batches
+    #         for key in epoch_stats:
+    #             epoch_losses[key] = epoch_stats[key] / num_batches  # Add stats to losses for logging
 
-        self.accelerator.wait_for_everyone()
+    #     self.accelerator.wait_for_everyone()
 
-        return epoch_sum_loss, epoch_losses
+    #     return epoch_sum_loss, epoch_losses
 
