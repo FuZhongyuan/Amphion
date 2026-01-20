@@ -4,9 +4,9 @@
         "libritts": 1.0
     },
     "preprocess": {
-        "dataset_type": "ljspeech",
-        "ljspeech_data_root": "data/LJSpeech-1.1",
-        "ljspeech_cache_path": "data/LJSpeechCache",
+        "dataset_type": "libritts",
+        "libritts_data_root": "data/LibriTTS",
+        "libritts_cache_path": "data/LibriTTSCache",
         "hop_size": 320,
         "sample_rate": 16000,
         "max_length": 128000,
@@ -15,21 +15,21 @@
         "valid_file": "valid.json",
         "train_file": "train.json",
         "load_phone": true,
-        "load_semantic_features": false,
+        "load_semantic_features": true,
         "load_mel_spectrogram": false,
-        "use_semantic_cache": false
+        "use_semantic_cache": true
     },
     "model": {
         "t2s_model": {
-            "hidden_size": 384,
-            "num_layers": 6,
-            "num_heads": 6,
+            "hidden_size": 768,
+            "num_layers": 12,
+            "num_heads": 12,
             "cfg_scale": 0.15,
             "cond_codebook_size": 512,
             "cond_dim": 256,
             "use_phone_cond": true,
-            "gradient_checkpointing": false,
-            "total_steps": 10000, //not max_step,because max_epoch is inf
+            "gradient_checkpointing": true,
+            "total_steps": 100000, //not max_step,because max_epoch is inf
             "stage1_steps": 0.3, //stage1_steps * total_steps
             "stage2_steps": 0.7,
             "min_mask_ratio": 0.1,
@@ -53,7 +53,7 @@
     "train": {
         "max_epoch": 0,
         "use_dynamic_batchsize": true,
-        "max_tokens": 8000000,
+        "max_tokens": 30000,
         "max_sentences": 50,
         "lr_warmup_steps": 5000,
         "lr_scheduler": "inverse_sqrt",
@@ -61,7 +61,7 @@
         "adam": {
             "lr": 5e-4,
             "betas": [0.9, 0.9],
-            "weight_decay": 0.1
+            "weight_decay": 1.0e-4
         },
         "ddp": false,
         "random_seed": 114,
@@ -79,9 +79,9 @@
         "keep_last": [5],
         "run_eval": [true],
         "dataloader": {
-            "num_worker": 8,
+            "num_worker": 24,
             "pin_memory": true,
-            "prefetch_factor": 4
+            "prefetch_factor": 8
         }
     }
 }

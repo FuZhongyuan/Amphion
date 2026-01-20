@@ -65,7 +65,7 @@
         "adam": {
             "lr": 5e-5,
             "betas": [0.9, 0.98],
-            "weight_decay": 0.01
+            "weight_decay": 1.0e-4
         },
         "ddp": false,
         "random_seed": 114,
@@ -84,7 +84,7 @@
         "run_eval": [true],
         "dataloader": {
             "num_worker": 16,
-            "pin_memory": false,
+            "pin_memory": true,
             "prefetch_factor": 2
         }
     }

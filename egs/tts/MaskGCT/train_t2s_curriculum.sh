@@ -14,7 +14,7 @@ export PYTHONIOENCODING=UTF-8
 
 ######## Set Experiment Configuration ###########
 exp_config="$exp_dir/t2s_curriculum.json"
-exp_name="t2s_curriculum_ljspeech"
+exp_name="t2s_curriculum"
 
 # Check if checkpoint exists for resume training
 checkpoint_dir="${work_dir}/ckpts/maskgct_mini/${exp_name}/checkpoint"
@@ -27,7 +27,7 @@ else
 fi
 
 ####### Train Model ###########
-CUDA_VISIBLE_DEVICES="4,5" accelerate launch --main_process_port 16494 --mixed_precision="bf16" \
+CUDA_VISIBLE_DEVICES="1,2" accelerate launch --main_process_port 16494 \
     "${work_dir}"/bins/tts/maskgct_train.py \
     --config=$exp_config \
     --exp_name=$exp_name \

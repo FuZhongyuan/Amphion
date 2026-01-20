@@ -99,11 +99,11 @@ class ResidualVQ(nn.Module):
             n_quantizers = self.num_quantizers
 
         if self.training:
-            n_quantizers = torch.ones((z.shape[0],)) * self.num_quantizers + 1
-            dropout = torch.randint(1, self.num_quantizers + 1, (z.shape[0],))
+            # Create tensors directly on GPU to avoid CPU-GPU sync during backward
+            n_quantizers = torch.ones((z.shape[0],), device=z.device) * self.num_quantizers + 1
+            dropout = torch.randint(1, self.num_quantizers + 1, (z.shape[0],), device=z.device)
             n_dropout = int(z.shape[0] * self.quantizer_dropout)
             n_quantizers[:n_dropout] = dropout[:n_dropout]
-            n_quantizers = n_quantizers.to(z.device)
 
         for i, quantizer in enumerate(self.quantizers):
             if self.training is False and i >= n_quantizers:

@@ -230,7 +230,7 @@ Curriculum training is more stable, so you can use **higher learning rates**:
 "adam": {
     "lr": 2e-4,  // 2x higher than standard (1e-4)
     "betas": [0.9, 0.98],
-    "weight_decay": 0.01
+    "weight_decay": 1.0e-4
 }
 ```
 
