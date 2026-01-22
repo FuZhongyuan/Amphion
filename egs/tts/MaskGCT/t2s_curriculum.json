@@ -10,8 +10,10 @@
         "hop_size": 320,
         "sample_rate": 16000,
         "max_length": 128000,
+        "min_dur": 0,
+        "max_dur": 50,
         "random_crop": true,
-        "processed_dir": "data/processed_maskgct/ljspeech",
+        "processed_dir": "data/processed_maskgct/libritts",
         "valid_file": "valid.json",
         "train_file": "train.json",
         "load_phone": true,
@@ -42,7 +44,7 @@
             "vocos_dim": 384,
             "vocos_intermediate_dim": 2048,
             "vocos_num_layers": 12,
-            "pretrained_path": "ckpts/maskgct_mini/semantic_codec_mini_ljspeech/checkpoint/epoch-1476_step-0302000_loss-14.263197/model.safetensors",
+            "pretrained_path": "ckpts/maskgct_mini/semantic_codec_mini_150k/checkpoint/epoch-0060_step-0150000_loss-44.534714/pytorch_model.bin",
             "representation_stat_mean_var_path": "models/tts/maskgct/ckpt/wav2vec2bert_stats.pt"
         },
         "representation_type": "w2v-bert-2.0",
@@ -53,7 +55,7 @@
     "train": {
         "max_epoch": 0,
         "use_dynamic_batchsize": true,
-        "max_tokens": 30000,
+        "max_tokens": 15000,
         "max_sentences": 50,
         "lr_warmup_steps": 5000,
         "lr_scheduler": "inverse_sqrt",
@@ -79,9 +81,9 @@
         "keep_last": [5],
         "run_eval": [true],
         "dataloader": {
-            "num_worker": 24,
+            "num_worker": 16,
             "pin_memory": true,
-            "prefetch_factor": 8
+            "prefetch_factor": 4
         }
     }
 }

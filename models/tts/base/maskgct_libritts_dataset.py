@@ -156,6 +156,7 @@ class MaskgctLibriTTSDataset(LibriTTSDataset):
         # Skip known error files
         if wav_path in self.error_files or full_wav_path in self.error_files:
             position = np.where(self.num_frame_indices == idx)[0][0]
+            raise RuntimeError(f"手动中断：加载文件 {full_wav_path} 失败")
             random_index = np.random.choice(self.num_frame_indices[:position])
             return self.__getitem__(random_index)
 
@@ -170,6 +171,7 @@ class MaskgctLibriTTSDataset(LibriTTSDataset):
                     )
                     if len(speech) > self.duration_setting["max"] * self.sample_rate:
                         position = np.where(self.num_frame_indices == idx)[0][0]
+                        raise RuntimeError(f"手动中断：加载文件 {full_wav_path} 失败")
                         random_index = np.random.choice(self.num_frame_indices[:position])
                         return self.__getitem__(random_index)
                     break
@@ -178,6 +180,7 @@ class MaskgctLibriTTSDataset(LibriTTSDataset):
                         logger.warning(f"Failed to load {full_wav_path} after {self.max_retries} attempts: {e}")
                         self._save_error_file(wav_path)
                         position = np.where(self.num_frame_indices == idx)[0][0]
+                        raise RuntimeError(f"手动中断：加载文件 {full_wav_path} 失败")
                         random_index = np.random.choice(self.num_frame_indices[:position])
                         return self.__getitem__(random_index)
 
@@ -276,6 +279,7 @@ class MaskgctLibriTTSDataset(LibriTTSDataset):
                 print(e)
                 print(f"Loading phone failed for {full_wav_path}")
                 print(text, language)
+                raise RuntimeError(f"手动中断：加载文件 {full_wav_path} 失败")
                 position = np.where(self.num_frame_indices == idx)[0][0]
                 random_index = np.random.choice(self.num_frame_indices[:position])
                 del position
@@ -283,6 +287,7 @@ class MaskgctLibriTTSDataset(LibriTTSDataset):
             
             if len(phone_id) >= speech_frames:
                 position = np.where(self.num_frame_indices == idx)[0][0]
+                raise RuntimeError(f"手动中断：加载文件 {full_wav_path} 失败")
                 random_index = np.random.choice(self.num_frame_indices[:position])
                 del position
                 return self.__getitem__(random_index)
@@ -296,6 +301,7 @@ class MaskgctLibriTTSDataset(LibriTTSDataset):
         else:
             logger.info("Failed to get metadata.")
             position = np.where(self.num_frame_indices == idx)[0][0]
+            raise RuntimeError(f"手动中断：加载文件 {full_wav_path} 失败")
             random_index = np.random.choice(self.num_frame_indices[:position])
             return self.__getitem__(random_index)
 

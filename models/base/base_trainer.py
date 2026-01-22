@@ -216,6 +216,12 @@ class BaseTrainer:
             self.train_dataloader = self.accelerator.prepare(
                 self.train_dataloader,
             )
+            # Also prepare validation dataloader for non-dynamic batch size mode
+            # This ensures DistributedSampler is applied and all ranks get same batch count
+            if self.valid_dataloader is not None:
+                self.valid_dataloader = self.accelerator.prepare(
+                    self.valid_dataloader,
+                )
 
         # Calculate steps per epoch for progress display (after accelerator prepare)
         self.steps_per_epoch = len(self.train_dataloader) // self.cfg.train.gradient_accumulation_step
@@ -878,7 +884,7 @@ class BaseTrainer:
     def train_loop(self):
         r"""Training loop. The public entry of training process."""
         # Wait everyone to prepare before we move on
-        self.accelerator.wait_for_everyone()
+        # self.accelerator.wait_for_everyone()
         # dump config file
         # if self.accelerator.is_main_process:
         #     self._dump_cfg(self.config_save_path)

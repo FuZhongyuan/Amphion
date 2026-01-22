@@ -239,23 +239,23 @@ class T2STrainer(BaseTrainer):
         targets = x0.reshape(-1)  # [B*T]
         mask = final_mask.reshape(-1)  # [B*T]
 
-        # # Cross-entropy loss
-        # ce_loss = F.cross_entropy(logits_flat, targets, reduction='none')
-        # ce_loss = (ce_loss * mask).sum() / (mask.sum() + 1e-8)
+        # Cross-entropy loss
+        ce_loss = F.cross_entropy(logits_flat, targets, reduction='none')
+        ce_loss = (ce_loss * mask).sum() / (mask.sum() + 1e-8)
 
-        # total_loss += ce_loss
-        # train_losses["ce_loss"] = ce_loss
+        total_loss += ce_loss
+        train_losses["ce_loss"] = ce_loss
         
-        train_gamma = min(1.5, self.step / 10000 * 1.5)
-        focal = focal_loss(
-            logits_flat,
-            targets,
-            mask,
-            gamma=train_gamma
-        )
+        # train_gamma = min(1.5, self.step / 10000 * 1.5)
+        # focal = focal_loss(
+        #     logits_flat,
+        #     targets,
+        #     mask,
+        #     gamma=train_gamma
+        # )
 
-        total_loss += focal
-        train_losses["focal_loss"] = focal
+        # total_loss += focal
+        # train_losses["focal_loss"] = focal
 
 
         # Compute token accuracy for monitoring
@@ -364,25 +364,25 @@ class T2STrainer(BaseTrainer):
             targets = x0.reshape(-1)  # [B*T]
             mask = final_mask.reshape(-1)  # [B*T]
 
-            # # Cross-entropy loss
-            # ce_loss = F.cross_entropy(logits_flat, targets, reduction='none')
-            # ce_loss = (ce_loss * mask).sum() / (mask.sum() + 1e-8)
+            # Cross-entropy loss
+            ce_loss = F.cross_entropy(logits_flat, targets, reduction='none')
+            ce_loss = (ce_loss * mask).sum() / (mask.sum() + 1e-8)
 
-            # total_loss += ce_loss
-            # valid_losses["ce_loss"] = ce_loss.item()
-            # valid_losses["mask_ratio"] = mask_prob.mean().item() if isinstance(mask_prob, torch.Tensor) else mask_prob
-
-            valid_gamma = min(1.5, self.step / 10000 * 1.5)
-            focal = focal_loss(
-                logits_flat,
-                targets,
-                mask,
-                gamma=valid_gamma
-            )
-
-            total_loss += focal
-            valid_losses["focal_loss"] = focal.item()
+            total_loss += ce_loss
+            valid_losses["ce_loss"] = ce_loss.item()
             valid_losses["mask_ratio"] = mask_prob.mean().item() if isinstance(mask_prob, torch.Tensor) else mask_prob
+
+            # valid_gamma = min(1.5, self.step / 10000 * 1.5)
+            # focal = focal_loss(
+            #     logits_flat,
+            #     targets,
+            #     mask,
+            #     gamma=valid_gamma
+            # )
+
+            # total_loss += focal
+            # valid_losses["focal_loss"] = focal.item()
+            # valid_losses["mask_ratio"] = mask_prob.mean().item() if isinstance(mask_prob, torch.Tensor) else mask_prob
 
             # Compute token accuracy
             predictions = logits.argmax(dim=-1)  # [B, T]
