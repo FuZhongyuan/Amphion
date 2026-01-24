@@ -11,7 +11,7 @@
         "sample_rate": 16000,
         "max_length": 128000,
         "min_dur": 3,
-        "max_dur": 30,
+        "max_dur": 35,
         "random_crop": true,
         "processed_dir": "data/processed_maskgct/libritts",
         "valid_file": "valid.json",
@@ -19,7 +19,8 @@
         "load_phone": true,
         "load_semantic_features": true,
         "load_mel_spectrogram": false,
-        "use_semantic_cache": true
+        "use_semantic_cache": true,
+        "load_audio": false
     },
     "model": {
         "t2s_model": {
@@ -28,10 +29,10 @@
             "num_heads": 12,
             "cfg_scale": 0.15,
             "cond_codebook_size": 512,
-            "cond_dim": 256,
+            "cond_dim": 512,
             "use_phone_cond": true,
             "gradient_checkpointing": true,
-            "total_steps": 100000, //not max_step,because max_epoch is inf
+            "total_steps": 1, //not max_step,because max_epoch is inf
             "stage1_steps": 0.3, //stage1_steps * total_steps
             "stage2_steps": 0.7,
             "min_mask_ratio": 0.1,

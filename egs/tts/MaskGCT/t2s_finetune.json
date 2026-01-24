@@ -11,14 +11,14 @@
         "sample_rate": 16000,
         "max_length": 128000,
         "min_dur": 3,
-        "max_dur": 30,
+        "max_dur": 35,
         "random_crop": true,
         "processed_dir": "data/processed_maskgct/ljspeech",
         "valid_file": "valid.json",
         "train_file": "train.json",
         "load_phone": true,
         "load_semantic_features": true,
-        // "load_mel_spectrogram": true,
+        "load_mel_spectrogram": false,
         "use_semantic_cache": true
     },
     "model": {
@@ -30,10 +30,7 @@
             "cond_codebook_size": 512,
             "cond_dim": 1024,
             "use_phone_cond": true,
-            "gradient_checkpointing": true,
-            "target_only_ratio": 0.5,
-            "min_prompt_ratio": 0.1,
-            "max_prompt_ratio": 0.5
+            "gradient_checkpointing": true
         },
         "semantic_codec": {
             "codebook_size": 512,

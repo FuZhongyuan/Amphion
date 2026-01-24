@@ -18,7 +18,7 @@
         "mel_var": 1.0,
         "max_length": 128000,
         "min_dur": 3,
-        "max_dur": 30,
+        "max_dur": 35,
         "random_crop": true,
         "processed_dir": "data/processed_maskgct/libritts",
         "valid_file": "valid.json",

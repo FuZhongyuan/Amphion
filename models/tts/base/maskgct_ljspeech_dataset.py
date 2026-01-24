@@ -44,6 +44,10 @@ class MaskgctLJSpeechDataset(LJSpeechDataset):
         self.load_mel_spectrogram = getattr(
             self.cfg.preprocess, "load_mel_spectrogram", False
         )
+        
+        # Audio loading switch: when disabled, skip loading raw audio to reduce disk I/O
+        # Useful for trainers that only use cached features (e.g., semantic_codec_trainer)
+        self.load_audio = getattr(self.cfg.preprocess, "load_audio", True)
 
         # Semantic feature caching configuration
         self.use_semantic_cache = getattr(self.cfg.preprocess, "use_semantic_cache", False)
@@ -159,67 +163,71 @@ class MaskgctLJSpeechDataset(LJSpeechDataset):
 
         meta = self.get_meta_from_wav_path(wav_path)
         if meta is not None:
-            # Try loading audio with retries
-            speech = None
-            for attempt in range(self.max_retries):
-                try:
-                    speech, _ = self._load_audio_with_torchaudio(
-                        full_wav_path, target_sr=self.sample_rate
-                    )
-                    if len(speech) > self.duration_setting["max"] * self.sample_rate:
-                        position = np.where(self.num_frame_indices == idx)[0][0]
-                        random_index = np.random.choice(self.num_frame_indices[:position])
-                        return self.__getitem__(random_index)
-                    break
-                except Exception as e:
-                    if attempt == self.max_retries - 1:
-                        logger.warning(f"Failed to load {full_wav_path} after {self.max_retries} attempts: {e}")
-                        self._save_error_file(wav_path)
-                        position = np.where(self.num_frame_indices == idx)[0][0]
-                        random_index = np.random.choice(self.num_frame_indices[:position])
-                        return self.__getitem__(random_index)
-
             single_feature = dict()
+            
+            # Load audio only if enabled (to reduce disk I/O when using cached features)
+            speech = None
+            if self.load_audio:
+                # Try loading audio with retries
+                for attempt in range(self.max_retries):
+                    try:
+                        speech, _ = self._load_audio_with_torchaudio(
+                            full_wav_path, target_sr=self.sample_rate
+                        )
+                        if len(speech) > self.duration_setting["max"] * self.sample_rate:
+                            position = np.where(self.num_frame_indices == idx)[0][0]
+                            random_index = np.random.choice(self.num_frame_indices[:position])
+                            return self.__getitem__(random_index)
+                        break
+                    except Exception as e:
+                        if attempt == self.max_retries - 1:
+                            logger.warning(f"Failed to load {full_wav_path} after {self.max_retries} attempts: {e}")
+                            self._save_error_file(wav_path)
+                            position = np.where(self.num_frame_indices == idx)[0][0]
+                            random_index = np.random.choice(self.num_frame_indices[:position])
+                            return self.__getitem__(random_index)
 
-            # pad the speech to the multiple of hop_size
-            vocos_hop_size = getattr(self.cfg.preprocess, "hop_size", 320)
-            speech = np.pad(
-                speech,
-                (
-                    0,
-                    vocos_hop_size - len(speech) % vocos_hop_size,
-                ),
-                mode="constant",
-            )
-
-            # For all the sample rates
-            for tgt_sr in self.all_sample_rates:
-                if tgt_sr != self.sample_rate:
-                    assert tgt_sr < self.sample_rate
-                    speech_tensor = torch.from_numpy(speech).float()
-                    tgt_speech = torchaudio.functional.resample(
-                        speech_tensor, self.sample_rate, tgt_sr
-                    ).numpy()
-                else:
-                    tgt_speech = speech
-                single_feature.update(
-                    {
-                        f"wav_{tgt_sr}": tgt_speech,
-                        f"wav_{tgt_sr}_len": len(tgt_speech),
-                    }
+            # Process audio if loaded
+            if self.load_audio and speech is not None:
+                # pad the speech to the multiple of hop_size
+                vocos_hop_size = getattr(self.cfg.preprocess, "hop_size", 320)
+                speech = np.pad(
+                    speech,
+                    (
+                        0,
+                        vocos_hop_size - len(speech) % vocos_hop_size,
+                    ),
+                    mode="constant",
                 )
 
-            # [Note] Mask is (n_frames,) but not (T,)
-            speech_frames = len(speech) // self.cfg.preprocess.hop_size
-            mask = np.ones(speech_frames, dtype=np.float32)
+                # For all the sample rates
+                for tgt_sr in self.all_sample_rates:
+                    if tgt_sr != self.sample_rate:
+                        assert tgt_sr < self.sample_rate
+                        speech_tensor = torch.from_numpy(speech).float()
+                        tgt_speech = torchaudio.functional.resample(
+                            speech_tensor, self.sample_rate, tgt_sr
+                        ).numpy()
+                    else:
+                        tgt_speech = speech
+                    single_feature.update(
+                        {
+                            f"wav_{tgt_sr}": tgt_speech,
+                            f"wav_{tgt_sr}_len": len(tgt_speech),
+                        }
+                    )
 
-            single_feature.update(
-                {
-                    "wav": speech,
-                    "wav_len": len(speech),
-                    "mask": mask,
-                }
-            )
+                # [Note] Mask is (n_frames,) but not (T,)
+                speech_frames = len(speech) // self.cfg.preprocess.hop_size
+                mask = np.ones(speech_frames, dtype=np.float32)
+
+                single_feature.update(
+                    {
+                        "wav": speech,
+                        "wav_len": len(speech),
+                        "mask": mask,
+                    }
+                )
 
             ## Load Semantic Model Input Features ##
             if self.load_semantic_features or self.load_mel_spectrogram:
@@ -228,7 +236,16 @@ class MaskgctLJSpeechDataset(LJSpeechDataset):
                 if cached_features is not None:
                     single_feature.update(cached_features)
                 else:
-                    # Fallback to real-time extraction
+                    # Fallback to real-time extraction (requires audio to be loaded)
+                    if not self.load_audio:
+                        logger.warning(
+                            f"Cache miss for {full_wav_path} but load_audio=False. "
+                            f"Cannot extract features in real-time. Skipping sample."
+                        )
+                        position = np.where(self.num_frame_indices == idx)[0][0]
+                        random_index = np.random.choice(self.num_frame_indices[:position])
+                        return self.__getitem__(random_index)
+                    
                     logger.debug(f"Cache miss for {full_wav_path}, extracting features in real-time")
 
                     # Extract semantic features if needed
@@ -286,11 +303,14 @@ class MaskgctLJSpeechDataset(LJSpeechDataset):
                 del position
                 return self.__getitem__(random_index)
             
-            if len(phone_id) >= speech_frames:
-                position = np.where(self.num_frame_indices == idx)[0][0]
-                random_index = np.random.choice(self.num_frame_indices[:position])
-                del position
-                return self.__getitem__(random_index)
+            # Check phone_id length against speech_frames (only if audio was loaded)
+            if self.load_audio and speech is not None:
+                speech_frames = len(speech) // self.cfg.preprocess.hop_size
+                if len(phone_id) >= speech_frames:
+                    position = np.where(self.num_frame_indices == idx)[0][0]
+                    random_index = np.random.choice(self.num_frame_indices[:position])
+                    del position
+                    return self.__getitem__(random_index)
 
             phone_id = torch.tensor(np.array(phone_id), dtype=torch.long)
             phone_mask = np.ones(len(phone_id), dtype=np.float32)

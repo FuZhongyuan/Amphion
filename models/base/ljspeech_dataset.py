@@ -52,6 +52,9 @@ class LJSpeechDataset(torch.utils.data.Dataset):
         self.dataset_ratio_dict = self.cfg.dataset
         # JsonHParams doesn't have .get() method, use getattr instead
         self.ljspeech_ratio = getattr(self.dataset_ratio_dict, "ljspeech", 1.0)
+        
+        # Audio loading switch: when disabled, skip loading raw audio to reduce disk I/O
+        self.load_audio = getattr(self.cfg.preprocess, "load_audio", True)
 
         self.wav_paths = []
         self.metadata = {}  # wav_id -> {text, normalized_text, language}
@@ -96,6 +99,13 @@ class LJSpeechDataset(torch.utils.data.Dataset):
         # Get validation split ratio from config (default 0.05 = 5%)
         self.valid_split_ratio = getattr(self.cfg.preprocess, "valid_split_ratio", 0.05)
 
+        # Duration settings - initialize BEFORE cache loading for filtering
+        self.duration_setting = {"min": 3, "max": 30}
+        if hasattr(self.cfg.preprocess, "min_dur"):
+            self.duration_setting["min"] = self.cfg.preprocess.min_dur
+        if hasattr(self.cfg.preprocess, "max_dur"):
+            self.duration_setting["max"] = self.cfg.preprocess.max_dur
+
         if cache_type == "path":
             if (
                 os.path.exists(self.wav_paths_cache)
@@ -123,12 +133,6 @@ class LJSpeechDataset(torch.utils.data.Dataset):
                 key=lambda k: self.index2num_frames[k],
             )
         )
-
-        self.duration_setting = {"min": 3, "max": 30}
-        if hasattr(self.cfg.preprocess, "min_dur"):
-            self.duration_setting["min"] = self.cfg.preprocess.min_dur
-        if hasattr(self.cfg.preprocess, "max_dur"):
-            self.duration_setting["max"] = self.cfg.preprocess.max_dur
 
     def g2p(self, text, language):
         """G2P conversion - to be implemented in VC version"""
@@ -365,18 +369,34 @@ class LJSpeechDataset(torch.utils.data.Dataset):
         
         # Select data based on split
         self.wav_paths = [all_wav_paths[i] for i in selected_indices]
-        
+
         if self.cache_type == "path":
             self.wav_path_index2duration = [all_durations[i] for i in selected_indices]
             self.wav_path_index2phonelen = [all_phone_counts[i] for i in selected_indices]
-            
+
+            # Filter samples by duration requirements to avoid resampling in __getitem__
+            min_dur = self.duration_setting["min"]
+            max_dur = self.duration_setting["max"]
+            valid_indices = [
+                i for i, dur in enumerate(self.wav_path_index2duration)
+                if min_dur <= dur <= max_dur
+            ]
+
+            if len(valid_indices) < len(self.wav_paths):
+                filtered_count = len(self.wav_paths) - len(valid_indices)
+                logger.info(f"Filtered {filtered_count} samples outside duration range [{min_dur}, {max_dur}]s")
+
+                self.wav_paths = [self.wav_paths[i] for i in valid_indices]
+                self.wav_path_index2duration = [self.wav_path_index2duration[i] for i in valid_indices]
+                self.wav_path_index2phonelen = [self.wav_path_index2phonelen[i] for i in valid_indices]
+
             # Calculate the number of frames
             self.index2num_frames = []
             for duration, phone_count in zip(
                 self.wav_path_index2duration, self.wav_path_index2phonelen
             ):
                 self.index2num_frames.append(duration * 50 + phone_count)
-        
+
         # Filter metadata to only include selected samples
         if self.metadata:
             selected_wav_ids = set()
@@ -448,18 +468,37 @@ class LJSpeechDataset(torch.utils.data.Dataset):
             wav_id = os.path.basename(path).replace(".wav", "")
             if wav_id in all_wav_id2meta:
                 self.wav_id2meta[wav_id] = all_wav_id2meta[wav_id]
-        
-        # Build index mappings
+
+        # Build index mappings and filter by duration
+        min_dur = self.duration_setting["min"]
+        max_dur = self.duration_setting["max"]
+        filtered_wav_paths = []
+        filtered_wav_id2meta = {}
+
         for path in tqdm(self.wav_paths, desc=f"Building {split_name} index mappings"):
             wav_id = os.path.basename(path).replace(".wav", "")
             if wav_id in self.wav_id2meta:
                 meta = self.wav_id2meta[wav_id]
                 duration = meta["duration"]
                 phone_count = meta["phone_count"]
-                self.wav_path_index2duration.append(duration)
-                self.wav_path_index2phonelen.append(phone_count)
-                self.index2num_frames.append(duration * 50)
-        
+
+                # Filter by duration requirements
+                if min_dur <= duration <= max_dur:
+                    filtered_wav_paths.append(path)
+                    filtered_wav_id2meta[wav_id] = meta
+                    self.wav_path_index2duration.append(duration)
+                    self.wav_path_index2phonelen.append(phone_count)
+                    self.index2num_frames.append(duration * 50)
+
+        # Log filtered count
+        if len(filtered_wav_paths) < len(self.wav_paths):
+            filtered_count = len(self.wav_paths) - len(filtered_wav_paths)
+            logger.info(f"Filtered {filtered_count} samples outside duration range [{min_dur}, {max_dur}]s")
+
+        # Update with filtered data
+        self.wav_paths = filtered_wav_paths
+        self.wav_id2meta = filtered_wav_id2meta
+
         logger.info(f"LJSpeech {split_name} set loaded successfully")
         logger.info(f"Number of {split_name} samples: {len(self.wav_paths)}")
 
@@ -507,58 +546,62 @@ class LJSpeechDataset(torch.utils.data.Dataset):
 
         meta = self.get_meta_from_wav_path(wav_path)
         if meta is not None:
-            # Try loading audio with retries
-            speech = None
-            for attempt in range(self.max_retries):
-                try:
-                    speech, sr = self._load_audio_with_torchaudio(
-                        full_wav_path, target_sr=self.cfg.preprocess.sample_rate
-                    )
-                    duration = len(speech) / sr
-
-                    # Check duration constraints
-                    if duration < self.duration_setting["min"]:
-                        position = np.where(self.num_frame_indices == idx)[0][0]
-                        random_index = np.random.choice(self.num_frame_indices[:position])
-                        return self.__getitem__(random_index)
-
-                    if len(speech) > self.duration_setting["max"] * self.cfg.preprocess.sample_rate:
-                        position = np.where(self.num_frame_indices == idx)[0][0]
-                        random_index = np.random.choice(self.num_frame_indices[:position])
-                        return self.__getitem__(random_index)
-                    break
-                except Exception as e:
-                    if attempt == self.max_retries - 1:
-                        logger.warning(f"Failed to load {full_wav_path} after {self.max_retries} attempts: {e}")
-                        self._save_error_file(wav_path)
-                        position = np.where(self.num_frame_indices == idx)[0][0]
-                        random_index = np.random.choice(self.num_frame_indices[:position])
-                        return self.__getitem__(random_index)
-
             single_feature = dict()
+            
+            # Load audio only if enabled (to reduce disk I/O when using cached features)
+            speech = None
+            if self.load_audio:
+                # Try loading audio with retries
+                for attempt in range(self.max_retries):
+                    try:
+                        speech, sr = self._load_audio_with_torchaudio(
+                            full_wav_path, target_sr=self.cfg.preprocess.sample_rate
+                        )
+                        duration = len(speech) / sr
 
-            # pad the speech to the multiple of hop_size
-            speech = np.pad(
-                speech,
-                (
-                    0,
-                    self.cfg.preprocess.hop_size
-                    - len(speech) % self.cfg.preprocess.hop_size,
-                ),
-                mode="constant",
-            )
+                        # Check duration constraints
+                        if duration < self.duration_setting["min"]:
+                            position = np.where(self.num_frame_indices == idx)[0][0]
+                            random_index = np.random.choice(self.num_frame_indices[:position])
+                            return self.__getitem__(random_index)
 
-            # get speech mask
-            speech_frames = len(speech) // self.cfg.preprocess.hop_size
-            # Keep mask in float32 to avoid mixing float64 in training
-            mask = np.ones(speech_frames, dtype=np.float32)
+                        if len(speech) > self.duration_setting["max"] * self.cfg.preprocess.sample_rate:
+                            position = np.where(self.num_frame_indices == idx)[0][0]
+                            random_index = np.random.choice(self.num_frame_indices[:position])
+                            return self.__getitem__(random_index)
+                        break
+                    except Exception as e:
+                        if attempt == self.max_retries - 1:
+                            logger.warning(f"Failed to load {full_wav_path} after {self.max_retries} attempts: {e}")
+                            self._save_error_file(wav_path)
+                            position = np.where(self.num_frame_indices == idx)[0][0]
+                            random_index = np.random.choice(self.num_frame_indices[:position])
+                            return self.__getitem__(random_index)
 
-            single_feature.update(
-                {
-                    "speech": speech,
-                    "mask": mask,
-                }
-            )
+                # Process audio if loaded
+                if speech is not None:
+                    # pad the speech to the multiple of hop_size
+                    speech = np.pad(
+                        speech,
+                        (
+                            0,
+                            self.cfg.preprocess.hop_size
+                            - len(speech) % self.cfg.preprocess.hop_size,
+                        ),
+                        mode="constant",
+                    )
+
+                    # get speech mask
+                    speech_frames = len(speech) // self.cfg.preprocess.hop_size
+                    # Keep mask in float32 to avoid mixing float64 in training
+                    mask = np.ones(speech_frames, dtype=np.float32)
+
+                    single_feature.update(
+                        {
+                            "speech": speech,
+                            "mask": mask,
+                        }
+                    )
 
             return single_feature
 

@@ -4,22 +4,23 @@
         "libritts": 1.0
     },
     "preprocess": {
-        "dataset_type": "ljspeech",
-        "ljspeech_data_root": "data/LJSpeech-1.1",
-        "ljspeech_cache_path": "data/LJSpeechCache",
+        "dataset_type": "libritts",
+        "libritts_data_root": "data/LibriTTS",
+        "libritts_cache_path": "data/LibriTTSCache",
         "hop_size": 320,
         "sample_rate": 16000,
         "max_length": 128000,
         "min_dur": 3,
-        "max_dur": 30,
+        "max_dur": 35,
         "random_crop": true,
-        "processed_dir": "data/processed_maskgct/ljspeech",
+        "processed_dir": "data/processed_maskgct/libritts",
         "valid_file": "valid.json",
         "train_file": "train.json",
         "load_phone": true,
         "load_semantic_features": true,
         "load_mel_spectrogram": false,
-        "use_semantic_cache": true
+        "use_semantic_cache": true,
+        "load_audio": false
     },
     "model": {
         "t2s_model": {
@@ -39,7 +40,7 @@
             "vocos_dim": 384,
             "vocos_intermediate_dim": 2048,
             "vocos_num_layers": 12,
-            "pretrained_path": "ckpts/maskgct_mini/semantic_codec_mini_ljspeech/checkpoint/epoch-1476_step-0302000_loss-14.263197/model.safetensors",
+            "pretrained_path": "ckpts/maskgct_mini/semantic_codec_mini_150k/checkpoint/epoch-0060_step-0150000_loss-44.534714/pytorch_model.bin",
             "representation_stat_mean_var_path": "models/tts/maskgct/ckpt/wav2vec2bert_stats.pt"
         },
         "representation_type": "w2v-bert-2.0",
@@ -50,14 +51,14 @@
     "train": {
         "max_epoch": 0,
         "use_dynamic_batchsize": true,
-        "max_tokens": 8000000,
+        "max_tokens": 15000,
         "max_sentences": 50,
         "lr_warmup_steps": 5000,
         "lr_scheduler": "inverse_sqrt",
-        "num_train_steps": 50000,
+        "num_train_steps": 100000,
         "adam": {
-            "lr": 1e-4,
-            "betas": [0.9, 0.98],
+            "lr": 5e-5,
+            "betas": [0.9, 0.9],
             "weight_decay": 1.0e-4
         },
         "ddp": false,
@@ -76,7 +77,7 @@
         "keep_last": [5],
         "run_eval": [true],
         "dataloader": {
-            "num_worker": 8,
+            "num_worker": 16,
             "pin_memory": true,
             "prefetch_factor": 4
         }

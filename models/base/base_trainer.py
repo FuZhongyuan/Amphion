@@ -529,7 +529,8 @@ class BaseTrainer:
                                 valid_batches, drop_last=False, use_random_sampler=False
                             ),
                             pin_memory=self.cfg.train.dataloader.pin_memory,
-                            prefetch_factor=self.cfg.train.dataloader.prefetch_factor
+                            prefetch_factor=self.cfg.train.dataloader.prefetch_factor,
+                            shuffle=False,
                         )
                         
                         if self.accelerator.is_main_process:
@@ -575,6 +576,7 @@ class BaseTrainer:
                 batch_size=self.cfg.train.batch_size,
                 num_workers=self.cfg.train.dataloader.num_worker,
                 pin_memory=self.cfg.train.dataloader.pin_memory,
+                prefetch_factor=self.cfg.train.dataloader.prefetch_factor
             )
 
             # Build validation dataloader
@@ -596,6 +598,7 @@ class BaseTrainer:
                             batch_size=self.cfg.train.batch_size,
                             num_workers=self.cfg.train.dataloader.num_worker,
                             pin_memory=self.cfg.train.dataloader.pin_memory,
+                            prefetch_factor=self.cfg.train.dataloader.prefetch_factor,
                             shuffle=False,
                         )
                         if self.accelerator.is_main_process:
