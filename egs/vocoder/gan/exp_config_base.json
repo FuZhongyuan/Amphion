@@ -31,7 +31,7 @@
     "popcs": "[dataset path]",
     "ljspeech": "data/LJSpeech-1.1",
     "vctk": "[dataset path]",
-    "libritts": "[dataset path]",
+    "libritts": "data/LibriTTS",
   },
   // TODO: Fill in the output log path
   "log_dir": "ckpts/vocoder",
@@ -48,6 +48,15 @@
     "use_frame_pitch": false,
     "use_uv": false,
     "use_audio": true,
+
+    // HDF5 storage configuration
+    "use_hdf5": true,
+    "samples_per_hdf5": 10000,
+    "use_float16": false,
+    "hdf5_compression": "gzip",
+    "hdf5_compression_opts": 4,
+    "hdf5_cache_size": 5,
+    "overwrite_existing": false,
 
     // TODO: Fill in the output data path
     "processed_dir": "data/processed_vocoder/hifigan_maskgct",

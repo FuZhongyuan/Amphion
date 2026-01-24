@@ -2,10 +2,10 @@
     "base_config": "config/vocoder.json",
     "model_type": "GANVocoder",
     "dataset": [
-        "ljspeech"
+        "libritts"
     ],
     "dataset_path": {
-        "ljspeech": "data/LJSpeech-1.1"
+        "libritts": "data/LibriTTS"
     },
     "log_dir": "ckpts/vocoder/hifigan_maskgct",
     "preprocess": {
@@ -19,8 +19,9 @@
         "use_frame_pitch": false,
         "use_uv": false,
         "use_audio": true,
+        "use_hdf5": true,
 
-        "processed_dir": "data/processed_vocoder/hifigan_ljspeech",
+        "processed_dir": "data/processed_vocoder/hifigan_maskgct",
 
         "sample_rate": 16000,
         "n_fft": 1024,
@@ -30,7 +31,12 @@
         "fmin": 0,
         "fmax": 8000,
 
-        "segment_size": 8000,
+        "samples_per_hdf5": 20000,
+        "use_float16": false,
+        "hdf5_compression": "gzip",
+        "hdf5_compression_opts": 4,
+        "hdf5_cache_size": 20,
+        "overwrite_existing": false,
 
         "min_level_db": -115,
         "ref_level_db": 20

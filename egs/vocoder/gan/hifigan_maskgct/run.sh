@@ -74,9 +74,10 @@ echo "Main Process Port: $main_process_port"
 
 ######## Features Extraction ###########
 if [ $running_stage -eq 1 ]; then
-    echo "Stage 1: Preprocessing for HiFi-GAN (MaskGCT)"
+    echo "Stage 1: Preprocessing for HiFi-GAN (MaskGCT) with HDF5 storage"
     echo "Sample Rate: 16000, Hop Size: 320, n_mel: 80"
-    CUDA_VISIBLE_DEVICES=$gpu python "${work_dir}"/bins/vocoder/preprocess.py \
+    echo "Using HDF5 format for efficient feature storage and loading"
+    CUDA_VISIBLE_DEVICES=$gpu python "${work_dir}"/bins/vocoder/preprocess_hdf5.py \
         --config $exp_config \
         --num_workers 8
 fi
@@ -152,9 +153,17 @@ This HiFi-GAN is configured specifically for MaskGCT:
 - n_mel: 80
 - Upsample rates: [10, 8, 2, 2] -> 320 total
 
+HDF5 Storage Configuration (in exp_config.json):
+- samples_per_hdf5: Number of samples per HDF5 file (default: 10000)
+- use_float16: Use float16 for storage (default: false)
+- hdf5_compression: Compression algorithm (gzip/lzf/none)
+- hdf5_compression_opts: Compression level 1-9 (default: 4)
+- hdf5_cache_size: Number of HDF5 files to cache (default: 5)
+- use_hdf5: Enable HDF5 storage (default: true)
+
 Usage Examples:
 
-1. Preprocess:
+1. Preprocess (with HDF5 storage):
    bash run.sh -s 1 --gpu 0
 
 2. Train:

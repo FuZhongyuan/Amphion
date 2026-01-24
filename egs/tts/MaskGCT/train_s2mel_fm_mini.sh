@@ -26,7 +26,7 @@ else
 fi
 
 ####### Train Model ###########
-CUDA_VISIBLE_DEVICES="1,5" accelerate launch --main_process_port 15293 --mixed_precision="bf16" \
+CUDA_VISIBLE_DEVICES="4,5" accelerate launch --main_process_port 15293 --mixed_precision="bf16" \
     "${work_dir}"/bins/tts/maskgct_train.py \
     --config=$exp_config \
     --exp_name=$exp_name \

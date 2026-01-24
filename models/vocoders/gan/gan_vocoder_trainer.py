@@ -41,6 +41,10 @@ from models.vocoders.gan.gan_vocoder_dataset import (
     GANVocoderDataset,
     GANVocoderCollator,
 )
+from models.vocoders.gan.gan_vocoder_hdf5_dataset import (
+    GANVocoderHDF5Dataset,
+    GANVocoderHDF5Collator,
+)
 
 from models.vocoders.gan.generator.bigvgan import BigVGAN
 from models.vocoders.gan.generator.hifigan import HiFiGAN
@@ -236,7 +240,12 @@ class GANVocoderTrainer(VocoderTrainer):
         self.config_save_path = os.path.join(self.exp_dir, "args.json")
 
     def _build_dataset(self):
-        return GANVocoderDataset, GANVocoderCollator
+        # Check if HDF5 storage is enabled
+        use_hdf5 = getattr(self.cfg.preprocess, 'use_hdf5', False)
+        if use_hdf5:
+            return GANVocoderHDF5Dataset, GANVocoderHDF5Collator
+        else:
+            return GANVocoderDataset, GANVocoderCollator
 
     def _build_criterion(self):
         class feature_criterion(torch.nn.Module):
