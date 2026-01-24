@@ -51,12 +51,22 @@ class MaskgctLibriTTSDataset(LibriTTSDataset):
         # Semantic feature caching configuration
         self.use_semantic_cache = getattr(self.cfg.preprocess, "use_semantic_cache", False)
         self.processed_dir = getattr(self.cfg.preprocess, "processed_dir", "")
-        
-        # HDF5 cache index
+
+        # Semantic code (discrete tokens) loading configuration
+        self.load_semantic_code = getattr(self.cfg.preprocess, "load_semantic_code", False)
+        self.semantic_code_dir = getattr(self.cfg.preprocess, "semantic_code_dir", "")
+
+        # HDF5 cache index for semantic features
         self.hdf5_index = {}
         self.hdf5_files = {}  # Cache for opened HDF5 files
         if self.use_semantic_cache and self.processed_dir:
             self._load_hdf5_index()
+
+        # HDF5 index for semantic codes (discrete tokens)
+        self.semantic_code_index = {}
+        self.semantic_code_files = {}  # Cache for opened HDF5 files
+        if self.load_semantic_code and self.semantic_code_dir:
+            self._load_semantic_code_index()
 
         if self.load_semantic_features:
             from transformers import SeamlessM4TFeatureExtractor
@@ -76,6 +86,18 @@ class MaskgctLibriTTSDataset(LibriTTSDataset):
                 logger.info(f"Loaded HDF5 index with {len(self.hdf5_index)} samples")
             except Exception as e:
                 logger.warning(f"Failed to load HDF5 index: {e}")
+
+    def _load_semantic_code_index(self):
+        """Load HDF5 index for semantic codes."""
+        index_path = os.path.join(self.semantic_code_dir, "hdf5_index.json")
+        if os.path.exists(index_path):
+            try:
+                with open(index_path, 'r') as f:
+                    data = json.load(f)
+                    self.semantic_code_index = data.get("sample_index", {})
+                logger.info(f"Loaded semantic code index with {len(self.semantic_code_index)} samples")
+            except Exception as e:
+                logger.warning(f"Failed to load semantic code index: {e}")
     
     def _get_hdf5_file(self, file_idx: int):
         """Get HDF5 file handle (with caching)."""
@@ -87,10 +109,25 @@ class MaskgctLibriTTSDataset(LibriTTSDataset):
             else:
                 return None
         return self.hdf5_files[file_idx]
-    
+
+    def _get_semantic_code_file(self, file_idx: int):
+        """Get semantic code HDF5 file handle (with caching)."""
+        if file_idx not in self.semantic_code_files:
+            hdf5_path = os.path.join(self.semantic_code_dir, f"semantic_code_{file_idx:05d}.h5")
+            if os.path.exists(hdf5_path):
+                self.semantic_code_files[file_idx] = h5py.File(hdf5_path, 'r')
+            else:
+                return None
+        return self.semantic_code_files[file_idx]
+
     def __del__(self):
         """Close all HDF5 files."""
         for f in self.hdf5_files.values():
+            try:
+                f.close()
+            except:
+                pass
+        for f in self.semantic_code_files.values():
             try:
                 f.close()
             except:
@@ -103,6 +140,46 @@ class MaskgctLibriTTSDataset(LibriTTSDataset):
             return chn_eng_g2p(text)
         else:
             return g2p(text, sentence=None, language=language)
+
+    def load_cached_semantic_code(self, wav_path):
+        """Load preprocessed semantic codes (discrete tokens) from HDF5 cache if available."""
+        if not self.load_semantic_code or not self.semantic_code_dir:
+            return None
+
+        try:
+            # Convert wav path to sample key
+            # For LibriTTS: data_root/train-clean-100/123/456/123_456_789.wav
+            # -> train-clean-100/123/456/123_456_789
+            rel_path = os.path.relpath(wav_path, self.data_root)
+            sample_key = os.path.splitext(rel_path)[0].replace(os.sep, '/')
+
+            # Look up in semantic code index
+            if sample_key not in self.semantic_code_index:
+                return None
+
+            index_info = self.semantic_code_index[sample_key]
+            file_idx = index_info["file_idx"]
+            group_name = index_info["group_name"]
+
+            # Get HDF5 file
+            hdf5_file = self._get_semantic_code_file(file_idx)
+            if hdf5_file is None or group_name not in hdf5_file:
+                return None
+
+            group = hdf5_file[group_name]
+
+            # Load semantic code if available
+            if "semantic_code" in group:
+                # Semantic codes are stored as int16, convert to int64 for PyTorch
+                semantic_code = group["semantic_code"][:].astype(np.int64)
+                return {"semantic_code": semantic_code}
+
+            return None
+
+        except Exception as e:
+            logger.warning(f"Failed to load cached semantic code for {wav_path}: {e}")
+
+        return None
 
     def load_cached_semantic_features(self, wav_path):
         """Load preprocessed semantic features from HDF5 cache if available."""
@@ -266,6 +343,17 @@ class MaskgctLibriTTSDataset(LibriTTSDataset):
 
                     # Note: Mel spectrogram extraction will be handled by trainer if not cached
 
+            ## Load Semantic Code (discrete tokens) ##
+            if self.load_semantic_code:
+                cached_semantic_code = self.load_cached_semantic_code(full_wav_path)
+                if cached_semantic_code is not None:
+                    single_feature.update(cached_semantic_code)
+                    # Also create semantic_mask based on semantic_code length
+                    semantic_code_len = len(cached_semantic_code["semantic_code"])
+                    single_feature["semantic_mask"] = np.ones(semantic_code_len, dtype=np.float32)
+                else:
+                    logger.warning(f"Semantic code not found for {full_wav_path}")
+
             if self.load_wav_path:
                 single_feature.update({"wav_path": full_wav_path})
 
@@ -360,6 +448,13 @@ class MaskgctLibriTTSCollator:
                     [utt[key].long() for utt in batch],
                     batch_first=True,
                     padding_value=1023,  # phone vocab size is 1024
+                )
+            elif key == "semantic_code":
+                # semantic_code is discrete tokens, pad with 0
+                packed_batch_features[key] = pad_sequence(
+                    [torch.as_tensor(b[key]).long() for b in batch],
+                    batch_first=True,
+                    padding_value=0,
                 )
             elif key == "wav_path":
                 packed_batch_features[key] = [b[key] for b in batch]

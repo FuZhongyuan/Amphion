@@ -220,3 +220,93 @@ A: 当前实现是单文件处理,内存占用较小。如仍有问题,可减小
 - **v1.0**: 独立的数据集预处理脚本
   - 分离的LJSpeech和LibriTTS脚本
   - 基本的语义特征提取
+
+
+## 1. 新增预处理脚本（New Preprocessing Script）
+
+**新增文件：**
+`models/tts/maskgct/Preprocess/preprocess_semantic_code.py`
+
+**功能说明：**
+
+* 从 HDF5 文件中加载预先提取的 `hidden_states`
+* 使用 **RepCodec** 模型将其量化为离散的 `semantic_code`
+* 将量化后的语义码保存为新的 HDF5 文件
+
+---
+
+## 2. 配置文件（Configuration Files）
+
+**新增配置：**
+
+* `models/tts/maskgct/Preprocess/preprocess_semantic_code_config.json`
+  → 语义码预处理配置文件
+* `egs/tts/MaskGCT/t2s_mini_with_semantic_code.json`
+  → 示例 T2S 训练配置
+* `egs/tts/MaskGCT/s2mel_dit_mini_with_semantic_code.json`
+  → 示例 S2MelDiT 训练配置
+
+---
+
+## 3. 数据集加载器更新（Dataset Loaders Updated）
+
+**修改文件：**
+
+* `models/tts/base/maskgct_ljspeech_dataset.py`
+* `models/tts/base/maskgct_libritts_dataset.py`
+
+**更新内容：**
+
+* 新增配置选项：
+
+  * `load_semantic_code`
+  * `semantic_code_dir`
+* 新增方法：
+
+  * `_load_semantic_code_index()`：加载 HDF5 索引
+  * `_get_semantic_code_file()`：获取 HDF5 文件句柄
+  * `load_cached_semantic_code()`：从 HDF5 加载语义码
+* 更新：
+
+  * `__getitem__`：在启用时加载语义码
+  * collator：支持 `semantic_code` 的 padding
+
+---
+
+## 4. 新增配置项（New Configuration Options）
+
+**训练配置文件中 `preprocess` 字段示例：**
+
+```json
+{
+  "preprocess": {
+    "load_semantic_code": true,
+    "semantic_code_dir": "data/processed_maskgct/libritts_semantic_code"
+  }
+}
+```
+
+---
+
+## 5. 使用流程（Usage Workflow）
+
+### 步骤 1：预处理语义隐藏状态（如尚未完成）
+
+```bash
+./models/tts/maskgct/Preprocess/run_preprocessing.sh
+```
+
+### 步骤 2：将隐藏状态量化为语义码
+
+```bash
+./models/tts/maskgct/Preprocess/run_semantic_code_preprocessing.sh
+```
+
+### 步骤 3：使用预计算语义码进行训练
+
+```bash
+# 使用 load_semantic_code=true 的新配置
+python bins/tts/maskgct_train.py \
+  --config egs/tts/MaskGCT/t2s_mini_with_semantic_code.json
+```
+

@@ -17,10 +17,12 @@
         "valid_file": "valid.json",
         "train_file": "train.json",
         "load_phone": true,
-        "load_semantic_features": true,
+        "load_semantic_features": false,
         "load_mel_spectrogram": false,
-        "use_semantic_cache": true,
-        "load_audio": false
+        "use_semantic_cache": false,
+        "load_audio": false,
+        "load_semantic_code": true,
+        "semantic_code_dir": "data/processed_maskgct/libritts_semantic_code"
     },
     "model": {
         "t2s_model": {
@@ -32,16 +34,6 @@
             "cond_dim": 512,
             "use_phone_cond": true,
             "gradient_checkpointing": true
-        },
-        "semantic_codec": {
-            "codebook_size": 512,
-            "hidden_size": 1024,
-            "codebook_dim": 8,
-            "vocos_dim": 384,
-            "vocos_intermediate_dim": 2048,
-            "vocos_num_layers": 12,
-            "pretrained_path": "ckpts/maskgct_mini/semantic_codec_mini_150k/checkpoint/epoch-0060_step-0150000_loss-44.534714/pytorch_model.bin",
-            "representation_stat_mean_var_path": "models/tts/maskgct/ckpt/wav2vec2bert_stats.pt"
         },
         "representation_type": "w2v-bert-2.0",
         "representation_sample_rate": 16000,

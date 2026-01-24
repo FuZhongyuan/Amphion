@@ -164,19 +164,19 @@ HDF5 Storage Configuration (in exp_config.json):
 Usage Examples:
 
 1. Preprocess (with HDF5 storage):
-   bash run.sh -s 1 --gpu 0
+   bash run.sh --stage 1 --gpu 0
 
 2. Train:
-   bash run.sh -s 2 -n hifigan_maskgct --gpu 0
+   bash run.sh --stage 2 --name hifigan_maskgct --gpu 0
 
 3. Inference from dataset:
-   bash run.sh -s 3 --gpu 0 \\
+   bash run.sh --stage 3 --gpu 0 \\
        --infer_mode infer_from_dataset \\
        --infer_datasets ljspeech \\
        --infer_expt_dir ckpts/vocoder/hifigan_maskgct
 
 4. Inference from mel features (e.g., from semantic-to-mel output):
-   bash run.sh -s 3 --gpu 0 \\
+   bash run.sh --stage 3 --gpu 0 \\
        --infer_mode infer_from_feature \\
        --infer_feature_dir outputs/semantic_to_mel \\
        --infer_expt_dir ckpts/vocoder/hifigan_maskgct

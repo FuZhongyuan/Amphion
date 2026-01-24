@@ -125,6 +125,13 @@ def extract_acoustic_features_hdf5(dataset, output_path, cfg, n_workers=1):
             metadata.extend(json.load(f))
 
     print(f"Total utterances to process: {len(metadata)}")
+    
+    # Shuffle metadata to avoid size-sorted HDF5 files
+    # This prevents extreme size differences between HDF5 files
+    import random
+    random.seed(42)  # Use fixed seed for reproducibility
+    random.shuffle(metadata)
+    print("Metadata shuffled to balance HDF5 file sizes")
 
     # Get HDF5 configuration
     samples_per_hdf5 = getattr(cfg.preprocess, 'samples_per_hdf5', 10000)
