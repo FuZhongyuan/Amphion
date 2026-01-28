@@ -73,7 +73,7 @@
         ],
         "batch_size": 32,
         "max_epoch": 1000000,
-        "save_checkpoint_stride": [50],
+        "save_checkpoint_stride": [5],
         "keep_last": [5],
         "run_eval": [true],
         "adamw": {

@@ -4,18 +4,18 @@ export HF_HOME="data/cache/huggingface"
 
 ######## Build Experiment Environment ###########
 exp_dir=$(cd `dirname $0`; pwd)
-work_dir=$(dirname $(dirname $(dirname $exp_dir)))
+work_dir=$(dirname $(dirname $(dirname $(dirname $exp_dir))))
 
 export WORK_DIR=$work_dir
 export PYTHONPATH=$work_dir
 export PYTHONIOENCODING=UTF-8
-export CUDA_VISIBLE_DEVICES="3"
+export CUDA_VISIBLE_DEVICES="2"
 
 # Configuration
-CFG_PATH="models/tts/maskgct/s2mel_fm_inference.json"
+CFG_PATH="models/tts/maskgct/inference/s2mel_dit_inference.json"
 SEMANTIC_CODEC_CKPT="ckpts/maskgct_mini/semantic_codec_mini_ljspeech/checkpoint/epoch-1476_step-0302000_loss-14.263197"
 T2S_CKPT="ckpts/maskgct_mini/t2s_curriculum_ljspeech_org/checkpoint_backup/epoch-0107_step-0014000_loss-3.183115"
-S2MEL_CKPT="ckpts/maskgct_mini/s2mel_fm_mini/checkpoint/epoch-0276_step-0036000_loss-0.580204"
+S2MEL_CKPT="ckpts/maskgct_mini/s2mel_dit_mini/checkpoint/epoch-0276_step-0036000_loss-0.129780"
 VOCODER_CKPT="ckpts/vocoder/hifigan_maskgct/hifigan_maskgct/checkpoint/epoch-0550_step-0213788_loss-34.959272"
 
 # Input
@@ -24,10 +24,10 @@ PROMPT_TEXT="The Middle Ages brought calligraphy to perfection, and it was natur
 TARGET_TEXT="The Middle Ages brought calligraphy to perfection, and it was natural therefore."
 
 # Output
-mkdir -p "ckpts/maskgct_mini/s2mel_fm_mini/outputs"
-OUTPUT_PATH="ckpts/maskgct_mini/s2mel_fm_mini/outputs/output_s2mel_fm.wav"
+mkdir -p "ckpts/maskgct_mini/s2mel_dit_mini/outputs"
+OUTPUT_PATH="ckpts/maskgct_mini/s2mel_dit_mini/outputs/output_s2mel_dit.wav"
 
-python models/tts/maskgct/s2mel_fm_inference.py \
+python models/tts/maskgct/inference/s2mel_dit_inference.py \
     --cfg_path ${CFG_PATH} \
     --semantic_codec_ckpt ${SEMANTIC_CODEC_CKPT} \
     --t2s_ckpt ${T2S_CKPT} \

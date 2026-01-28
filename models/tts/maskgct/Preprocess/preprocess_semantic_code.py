@@ -24,6 +24,7 @@ from tqdm import tqdm
 from typing import Dict, Any, Optional, List
 import threading
 from concurrent.futures import ThreadPoolExecutor
+from utils.util import load_config
 
 
 class SemanticCodec:
@@ -31,27 +32,13 @@ class SemanticCodec:
 
     def __init__(
         self,
-        pretrained_path: str,
-        codebook_size: int = 512,
-        hidden_size: int = 1024,
-        codebook_dim: int = 8,
-        vocos_dim: int = 384,
-        vocos_intermediate_dim: int = 2048,
-        vocos_num_layers: int = 12,
-        stat_path: Optional[str] = None,
+        cfg,
         device: str = "cuda"
     ):
         """Initialize the semantic codec.
 
         Args:
-            pretrained_path: Path to pretrained RepCodec model
-            codebook_size: Size of the codebook
-            hidden_size: Hidden dimension of the model
-            codebook_dim: Dimension of codebook vectors
-            vocos_dim: Vocos backbone dimension
-            vocos_intermediate_dim: Vocos intermediate dimension
-            vocos_num_layers: Number of Vocos layers
-            stat_path: Path to normalization statistics (mean/var)
+            cfg: Configuration object containing codec parameters (e.g., codebook_size, hidden_size, etc.)
             device: Device to run the model on
         """
         from models.codec.kmeans.repcodec_model import RepCodec
@@ -59,22 +46,11 @@ class SemanticCodec:
 
         self.device = torch.device(device if torch.cuda.is_available() else "cpu")
 
-        # Create config object for RepCodec
-        class CodecConfig:
-            pass
-
-        cfg = CodecConfig()
-        cfg.codebook_size = codebook_size
-        cfg.hidden_size = hidden_size
-        cfg.codebook_dim = codebook_dim
-        cfg.vocos_dim = vocos_dim
-        cfg.vocos_intermediate_dim = vocos_intermediate_dim
-        cfg.vocos_num_layers = vocos_num_layers
-
-        # Initialize model
+        # Initialize model with config
         self.model = RepCodec(cfg=cfg)
 
         # Load pretrained weights
+        pretrained_path = getattr(cfg, "pretrained_path", None)
         if pretrained_path:
             if os.path.isdir(pretrained_path):
                 model_path = os.path.join(pretrained_path, "model.safetensors")
@@ -102,6 +78,7 @@ class SemanticCodec:
         # Load normalization statistics
         self.semantic_mean = None
         self.semantic_std = None
+        stat_path = getattr(cfg, "representation_stat_mean_var_path", None)
         if stat_path and os.path.exists(stat_path):
             print(f"Loading normalization statistics from: {stat_path}")
             stat = torch.load(stat_path, map_location=self.device)
@@ -109,6 +86,8 @@ class SemanticCodec:
             self.semantic_std = torch.sqrt(torch.tensor(stat["var"])).to(self.device)
 
         print(f"Semantic codec loaded on device: {self.device}")
+        codebook_size = getattr(cfg, "codebook_size", None)
+        hidden_size = getattr(cfg, "hidden_size", None)
         print(f"Codebook size: {codebook_size}, Hidden size: {hidden_size}")
 
     @torch.no_grad()
@@ -360,10 +339,6 @@ class HDF5SemanticCodeProcessor:
         return metadata
 
 
-def load_config(config_path: str) -> Dict[str, Any]:
-    """Load configuration from JSON file."""
-    with open(config_path, 'r') as f:
-        return json.load(f)
 
 
 def main():
@@ -380,60 +355,44 @@ def main():
     args = parser.parse_args()
 
     # Load config if provided
-    config = {}
-    if args.config:
-        config = load_config(args.config)
+    if not args.config:
+        raise ValueError("--config is required")
+    cfg = load_config(args.config)
 
-    # Override config with command line arguments
-    input_dir = config.get("input_dir")
-    output_dir = config.get("output_dir")
-    pretrained_path = config.get("semantic_codec", {}).get("pretrained_path")
-    stat_path = config.get("semantic_codec", {}).get("representation_stat_mean_var_path")
-
-    # Get codec parameters
-    codec_config = config.get("semantic_codec", {})
-    codebook_size = codec_config.get("codebook_size", 512)
-    hidden_size = codec_config.get("hidden_size", 1024)
-    codebook_dim = codec_config.get("codebook_dim", 8)
-    vocos_dim = codec_config.get("vocos_dim", 384)
-    vocos_intermediate_dim = codec_config.get("vocos_intermediate_dim", 2048)
-    vocos_num_layers = codec_config.get("vocos_num_layers", 12)
-
-    batch_size = config.get("batch_size", 32)
-    samples_per_file = config.get("samples_per_file", 20000)
-    overwrite = config.get("overwrite", False)
-    device = config.get("device", "cuda")
+    # Get parameters from config
+    input_dir = getattr(cfg, "input_dir", None)
+    output_dir = getattr(cfg, "output_dir", None)
+    device = getattr(cfg, "device", "cuda")
+    batch_size = getattr(cfg, "batch_size", 32)
+    samples_per_file = getattr(cfg, "samples_per_file", 20000)
+    overwrite = getattr(cfg, "overwrite", False)
 
     # Validate required parameters
     if not input_dir:
-        raise ValueError("input_dir is required (via --input_dir or config file)")
+        raise ValueError("input_dir is required in config file")
     if not output_dir:
-        raise ValueError("output_dir is required (via --output_dir or config file)")
-    if not pretrained_path:
-        raise ValueError("pretrained_path is required (via --pretrained_path or config file)")
+        raise ValueError("output_dir is required in config file")
+    if not hasattr(cfg, "semantic_codec"):
+        raise ValueError("semantic_codec is required in config file")
+    if not hasattr(cfg.semantic_codec, "pretrained_path"):
+        raise ValueError("semantic_codec.pretrained_path is required in config file")
 
     print("=" * 60)
     print("Semantic Code Preprocessing")
     print("=" * 60)
     print(f"Input directory: {input_dir}")
     print(f"Output directory: {output_dir}")
-    print(f"Pretrained path: {pretrained_path}")
+    print(f"Pretrained path: {cfg.semantic_codec.pretrained_path}")
+    stat_path = getattr(cfg.semantic_codec, "representation_stat_mean_var_path", None)
     print(f"Stat path: {stat_path}")
-    print(f"Codebook size: {codebook_size}")
-    print(f"Hidden size: {hidden_size}")
+    print(f"Codebook size: {getattr(cfg.semantic_codec, 'codebook_size', None)}")
+    print(f"Hidden size: {getattr(cfg.semantic_codec, 'hidden_size', None)}")
     print(f"Device: {device}")
     print("=" * 60)
 
     # Initialize semantic codec
     semantic_codec = SemanticCodec(
-        pretrained_path=pretrained_path,
-        codebook_size=codebook_size,
-        hidden_size=hidden_size,
-        codebook_dim=codebook_dim,
-        vocos_dim=vocos_dim,
-        vocos_intermediate_dim=vocos_intermediate_dim,
-        vocos_num_layers=vocos_num_layers,
-        stat_path=stat_path,
+        cfg=cfg.semantic_codec,
         device=device
     )
 

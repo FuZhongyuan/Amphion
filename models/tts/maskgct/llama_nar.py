@@ -127,82 +127,11 @@ class LlamaNARDecoderLayer(LlamaDecoderLayer):
 
         return outputs
 
-    def __init__(self, config: LlamaConfig, layer_idx: int):
-        """Override to adaptive layer norm"""
-        super().__init__(config, layer_idx)  # init attention, mlp, etc.
-        self.layer_idx = layer_idx
-        self.input_layernorm = LlamaAdaptiveRMSNorm(
-            config.hidden_size, eps=config.rms_norm_eps, dim_cond=config.hidden_size
-        )
-        self.post_attention_layernorm = LlamaAdaptiveRMSNorm(
-            config.hidden_size, eps=config.rms_norm_eps, dim_cond=config.hidden_size
-        )
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        cond_embedding: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Tuple[torch.Tensor]] = None,
-        output_attentions: Optional[bool] = False,
-        use_cache: Optional[bool] = False,
-    ) -> Tuple[
-        torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]
-    ]:
-        """
-        Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
-            attention_mask (`torch.FloatTensor`, *optional*): attention mask of size
-                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-            use_cache (`bool`, *optional*):
-                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
-                (see `past_key_values`).
-            past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
-        """
-
-        residual = hidden_states
-
-        hidden_states = self.input_layernorm(
-            hidden_states, cond_embedding=cond_embedding
-        )
-
-        # Self Attention
-        hidden_states, self_attn_weights, present_key_value = self.self_attn(
-            hidden_states=hidden_states,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_value=past_key_value,
-            output_attentions=output_attentions,
-            use_cache=use_cache,
-        )
-        hidden_states = residual + hidden_states
-
-        # Fully Connected
-        residual = hidden_states
-        hidden_states = self.post_attention_layernorm(
-            hidden_states, cond_embedding=cond_embedding
-        )
-        hidden_states = self.mlp(hidden_states)
-        hidden_states = residual + hidden_states
-
-        outputs = (hidden_states,)
-
-        if output_attentions:
-            outputs += (self_attn_weights,)
-
-        if use_cache:
-            outputs += (present_key_value,)
-
-        return outputs
-
 
 class DiffLlama(LlamaModel):
     def __init__(
         self,
+        mel_dim=100,
         hidden_size=1024,
         num_heads=16,
         num_layers=16,
@@ -240,6 +169,19 @@ class DiffLlama(LlamaModel):
             nn.Linear(hidden_size, hidden_size * 4),
             nn.SiLU(),
             nn.Linear(hidden_size * 4, hidden_size),
+        )
+        
+        # Add mel input/output MLPs for better feature processing
+        self.mel_mlp = nn.Sequential(
+            nn.Linear(mel_dim, hidden_size * 4),
+            nn.SiLU(),
+            nn.Linear(hidden_size * 4, hidden_size),
+        )
+        
+        self.mel_out_mlp = nn.Sequential(
+            nn.Linear(hidden_size, hidden_size * 4),
+            nn.SiLU(),
+            nn.Linear(hidden_size * 4, mel_dim),
         )
 
         for layer in self.layers:
@@ -321,6 +263,9 @@ class DiffLlama(LlamaModel):
 
         # condtion mlp
         cond_embedding = self.cond_mlp(cond)  # (B, T, C)
+
+        # condition mel input through MLP
+        x = self.mel_mlp(x)
 
         # diffusion step embedding
         diffusion_step = self.diff_step_embedding(diffusion_step).to(x.device)
@@ -438,6 +383,9 @@ class DiffLlama(LlamaModel):
             all_hidden_states += (hidden_states,)
 
         next_cache = next_decoder_cache if use_cache else None
+
+        # Project back to mel space
+        hidden_states = self.mel_out_mlp(hidden_states)
 
         return hidden_states
 

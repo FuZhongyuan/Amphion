@@ -35,16 +35,6 @@
             "use_phone_cond": true,
             "gradient_checkpointing": true
         },
-        "semantic_codec": {
-            "codebook_size": 512,
-            "hidden_size": 1024,
-            "codebook_dim": 8,
-            "vocos_dim": 384,
-            "vocos_intermediate_dim": 2048,
-            "vocos_num_layers": 12,
-            "pretrained_path": "ckpts/maskgct_mini/semantic_codec_mini_150k/checkpoint/epoch-0060_step-0150000_loss-44.534714",
-            "representation_stat_mean_var_path": "models/tts/maskgct/ckpt/wav2vec2bert_stats.pt"
-        },
         "representation_type": "w2v-bert-2.0",
         "representation_sample_rate": 16000,
         "use_norm_feat": true

@@ -66,12 +66,10 @@ class SemanticToMelDiT(nn.Module):
         # Semantic token embedding
         self.cond_emb = nn.Embedding(cond_codebook_size, hidden_size)
 
-        # Mel input/output projections
-        self.mel_in_proj = nn.Linear(mel_dim, hidden_size)
-        self.mel_out_proj = nn.Linear(hidden_size, mel_dim)
-
         # Noise estimator (DiffLlama)
+        # Note: DiffLlama now has internal mel_mlp and mel_out_mlp for better feature processing
         self.diff_estimator = DiffLlama(
+            mel_dim=mel_dim,
             hidden_size=hidden_size,
             num_heads=num_heads,
             num_layers=num_layers,
@@ -118,13 +116,28 @@ class SemanticToMelDiT(nn.Module):
                     nn.init.normal_(m.q_proj_weight, std=0.02)
                     nn.init.normal_(m.k_proj_weight, std=0.02)
                     nn.init.normal_(m.v_proj_weight, std=0.02)
+
                 if m.in_proj_bias is not None:
                     nn.init.constant_(m.in_proj_bias, 0.0)
                     nn.init.constant_(m.out_proj.bias, 0.0)
+                if m.bias_k is not None:
+                    nn.init.xavier_normal_(m.bias_k)
+                if m.bias_v is not None:
+                    nn.init.xavier_normal_(m.bias_v)
+
+            elif (
+                isinstance(m, nn.Conv1d)
+                or isinstance(m, nn.ConvTranspose1d)
+                or isinstance(m, nn.Conv2d)
+                or isinstance(m, nn.ConvTranspose2d)
+            ):
+                m.weight.data.normal_(0.0, 0.02)
+
             elif isinstance(m, nn.Linear):
                 m.weight.data.normal_(mean=0.0, std=0.02)
                 if m.bias is not None:
                     m.bias.data.zero_()
+
             elif isinstance(m, nn.Embedding):
                 m.weight.data.normal_(mean=0.0, std=0.02)
                 if m.padding_idx is not None:
@@ -202,12 +215,8 @@ class SemanticToMelDiT(nn.Module):
                 torch.zeros_like(prompt_len),
             ).to(cond.device).unsqueeze(-1).unsqueeze(-1)
 
-        # Project to hidden space
-        x_t_hidden = self.mel_in_proj(x_t)
-
-        # Predict noise
-        hidden_out = self.diff_estimator(x_t_hidden, t_normalized, cond, x_mask)
-        noise_pred = self.mel_out_proj(hidden_out)
+        # Predict noise (DiffLlama now handles mel projection internally)
+        noise_pred = self.diff_estimator(x_t, t_normalized, cond, x_mask)
 
         # Final mask
         final_mask = mask * x_mask[..., None]
@@ -225,19 +234,14 @@ class SemanticToMelDiT(nn.Module):
         """Single denoising step: p(x_{t-1} | x_t)."""
         t_normalized = t_idx.float() / self.num_diffusion_steps
 
-        # Project to hidden
-        x_t_hidden = self.mel_in_proj(x_t)
-
-        # Predict noise
-        hidden_out = self.diff_estimator(x_t_hidden, t_normalized, cond, x_mask)
-        noise_pred = self.mel_out_proj(hidden_out)
+        # Predict noise (DiffLlama now handles mel projection internally)
+        noise_pred = self.diff_estimator(x_t, t_normalized, cond, x_mask)
 
         # CFG
         if cfg > 0:
-            uncond_hidden = self.diff_estimator(
-                x_t_hidden, t_normalized, torch.zeros_like(cond), x_mask
+            uncond_noise = self.diff_estimator(
+                x_t, t_normalized, torch.zeros_like(cond), x_mask
             )
-            uncond_noise = self.mel_out_proj(uncond_hidden)
             noise_pred = noise_pred + cfg * (noise_pred - uncond_noise)
 
         # Compute x_{t-1}
@@ -308,22 +312,18 @@ class SemanticToMelDiT(nn.Module):
 
             # Concatenate prompt and current estimate
             x_full = torch.cat([prompt_mel, x_t], dim=1)
-            x_full_hidden = self.mel_in_proj(x_full)
 
             t_normalized = t_batch.float() / self.num_diffusion_steps
 
-            # Predict noise
-            hidden_out = self.diff_estimator(x_full_hidden, t_normalized, cond, xt_mask)
-            noise_pred = self.mel_out_proj(hidden_out)
+            # Predict noise (DiffLlama now handles mel projection internally)
+            noise_pred = self.diff_estimator(x_full, t_normalized, cond, xt_mask)
             noise_pred = noise_pred[:, prompt_len:, :]
 
             # CFG
             if cfg > 0:
-                x_t_hidden = self.mel_in_proj(x_t)
-                uncond_hidden = self.diff_estimator(
-                    x_t_hidden, t_normalized, torch.zeros_like(cond)[:, :target_len, :], x_mask
+                uncond_noise = self.diff_estimator(
+                    x_t, t_normalized, torch.zeros_like(cond)[:, :target_len, :], x_mask
                 )
-                uncond_noise = self.mel_out_proj(uncond_hidden)
                 noise_pred = noise_pred + cfg * (noise_pred - uncond_noise)
 
             if use_ddim:

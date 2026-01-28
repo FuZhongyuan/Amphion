@@ -197,7 +197,7 @@ class S2MelFMTrainer(BaseTrainer):
         flow_gt = x - (1 - sigma) * noise
 
         diff_loss = F.l1_loss(flow_pred, flow_gt, reduction="none").float() * final_mask.unsqueeze(-1)
-        diff_loss = torch.mean(diff_loss, dim=2).sum() / (final_mask.sum() + 1e-8)
+        diff_loss = torch.mean(diff_loss, dim=2).sum() / (final_mask.sum())
 
         total_loss += diff_loss
         train_losses["diff_loss"] = diff_loss
@@ -207,7 +207,7 @@ class S2MelFMTrainer(BaseTrainer):
         self.accelerator.backward(total_loss)
         if self.accelerator.sync_gradients:
             self.accelerator.clip_grad_norm_(
-                filter(lambda p: p.requires_grad, self.model.parameters()), 1.0
+                filter(lambda p: p.requires_grad, self.model.parameters()), 0.2
             )
         self.optimizer.step()
         self.scheduler.step()
@@ -266,7 +266,7 @@ class S2MelFMTrainer(BaseTrainer):
             flow_gt = x - (1 - sigma) * noise
 
             diff_loss = F.l1_loss(flow_pred, flow_gt, reduction="none").float() * final_mask.unsqueeze(-1)
-            diff_loss = torch.mean(diff_loss, dim=2).sum() / (final_mask.sum() + 1e-8)
+            diff_loss = torch.mean(diff_loss, dim=2).sum() / (final_mask.sum())
 
             total_loss += diff_loss
             valid_losses["diff_loss"] = diff_loss.item()

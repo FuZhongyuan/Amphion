@@ -25,7 +25,7 @@ else
 fi
 
 ####### Train Model ###########  不能使用半精度训练
-CUDA_VISIBLE_DEVICES="4,5,6,7" accelerate launch --main_process_port 16436 \
+CUDA_VISIBLE_DEVICES="0,2" accelerate launch --main_process_port 16436 \
     "${work_dir}"/bins/tts/maskgct_train.py \
     --config=$exp_config \
     --exp_name=$exp_name \

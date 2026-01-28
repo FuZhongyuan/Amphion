@@ -285,7 +285,6 @@ class S2MelFMInferencePipeline:
             n_timesteps=t2s_n_timesteps,
             cfg=t2s_cfg,
         )
-
         # Combine prompt and target semantic tokens
         combined_semantic = torch.cat([prompt_semantic, target_semantic], dim=1)
 

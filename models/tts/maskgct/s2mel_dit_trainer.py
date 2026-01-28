@@ -180,7 +180,7 @@ class S2MelDiTTrainer(BaseTrainer):
 
         # MSE loss for diffusion
         diff_loss = F.mse_loss(noise_pred, noise, reduction="none").float() * final_mask.unsqueeze(-1)
-        diff_loss = torch.mean(diff_loss, dim=2).sum() / (final_mask.sum() + 1e-8)
+        diff_loss = torch.mean(diff_loss, dim=2).sum() / (final_mask.sum())
 
         total_loss += diff_loss
         train_losses["diff_loss"] = diff_loss
@@ -240,7 +240,7 @@ class S2MelDiTTrainer(BaseTrainer):
             final_mask = final_mask.squeeze(-1)
 
             diff_loss = F.mse_loss(noise_pred, noise, reduction="none").float() * final_mask.unsqueeze(-1)
-            diff_loss = torch.mean(diff_loss, dim=2).sum() / (final_mask.sum() + 1e-8)
+            diff_loss = torch.mean(diff_loss, dim=2).sum() / (final_mask.sum())
 
             total_loss += diff_loss
             valid_losses["diff_loss"] = diff_loss.item()

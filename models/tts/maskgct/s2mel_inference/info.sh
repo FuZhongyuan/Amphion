@@ -8,21 +8,22 @@ work_dir=$(dirname $(dirname $(dirname $(dirname $exp_dir))))
 export WORK_DIR=$work_dir
 export PYTHONPATH=$work_dir
 export PYTHONIOENCODING=UTF-8
-export CUDA_VISIBLE_DEVICES="0"
+export CUDA_VISIBLE_DEVICES="5"
 
-
-python models/tts/maskgct/s2mel_inference/s2mel_inference.py \
-    --config egs/tts/MaskGCT/s2mel_dit_mini.json \
-    --s2mel_ckpt ckpts/maskgct_mini/s2mel_dit_mini_backup/checkpoint/epoch-0033_step-0232000_loss-0.098823 \
-    --vocoder_ckpt ckpts/vocoder/hifigan_maskgct/hifigan_maskgct/checkpoint/epoch-0550_step-0213788_loss-34.959272 \
-    --vocoder_config egs/vocoder/gan/hifigan_maskgct/exp_config.json \
-    --input data/LibriTTS/test-other/367/130732/367_130732_000000_000000.wav \
-    --output_dir ckpts/maskgct_mini/s2mel_dit_mini_backup/result
 
 # python models/tts/maskgct/s2mel_inference/s2mel_inference.py \
-#     --config egs/tts/MaskGCT/s2mel_fm_mini.json \
-#     --s2mel_ckpt ckpts/maskgct_mini/s2mel_fm_mini_backup/checkpoint/epoch-0031_step-0220000_loss-0.659933 \
-#     --vocoder_ckpt ckpts/vocoder/hifigan_maskgct/hifigan_maskgct/checkpoint/epoch-0550_step-0213788_loss-34.959272 \
+#     --config models/tts/maskgct/inference/s2mel_dit_inference.json \
+#     --s2mel_ckpt ckpts/maskgct_mini/s2mel_dit_mini/checkpoint/epoch-0001_step-0006000_loss-0.141610 \
+#     --vocoder_ckpt ckpts/vocoder/hifigan_libritts/checkpoint/epoch-0020_step-0058191_loss-34.994965 \
 #     --vocoder_config egs/vocoder/gan/hifigan_maskgct/exp_config.json \
-#     --input data/LibriTTS/test-other/367/130732/367_130732_000000_000000.wav \
-#     --output_dir ckpts/maskgct_mini/s2mel_fm_mini_backup/result
+#     --input data/LibriTTS/test-other/367/130732/367_130732_000002_000000.wav \
+#     --output_dir models/tts/maskgct/s2mel_inference/result_s2mel_dit
+
+python models/tts/maskgct/s2mel_inference/s2mel_inference.py \
+    --config models/tts/maskgct/inference/s2mel_fm_inference.json \
+    --s2mel_ckpt ckpts/maskgct_mini/s2mel_fm_mini/checkpoint/epoch-0023_step-0070000_loss-0.594491 \
+    --vocoder_ckpt ckpts/vocoder/hifigan_libritts/checkpoint/epoch-0020_step-0058191_loss-34.994965 \
+    --vocoder_config egs/vocoder/gan/hifigan_maskgct/exp_config.json \
+    --input data/LJSpeech-1.1/wavs/LJ001-0006.wav \
+    --output_dir models/tts/maskgct/s2mel_inference/result_s2mel_fm
+

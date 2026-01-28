@@ -6,7 +6,6 @@
 export HF_ENDPOINT="https://hf-mirror.com"
 export HF_HOME="data/cache/huggingface"
 export CUDA_VISIBLE_DEVICES="0,1,2,3"
-set -e  # Exit on any error
 
 ######## Build Experiment Environment ###########
 exp_dir=$(cd `dirname $0`; pwd)

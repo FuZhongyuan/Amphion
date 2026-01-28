@@ -67,3 +67,4 @@ get_available_gpu.py
 
 glow-tts-ref/
 tacotron2-ref/
+result_s2mel_fm/

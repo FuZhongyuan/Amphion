@@ -55,26 +55,23 @@ class SemanticToMelFM(nn.Module):
         self.num_heads = num_heads
         self.cfg_scale = cfg_scale
         self.cond_codebook_size = cond_codebook_size
-        self.sigma = sigma
         self.time_scheduler = time_scheduler
 
         # Semantic token embedding (discrete -> continuous)
         self.cond_emb = nn.Embedding(cond_codebook_size, hidden_size)
-
-        # Mel input projection
-        self.mel_in_proj = nn.Linear(mel_dim, hidden_size)
-
-        # Mel output projection
-        self.mel_out_proj = nn.Linear(hidden_size, mel_dim)
+        
+        self.reset_parameters()
 
         # Flow estimator (DiffLlama from llama_nar.py)
+        # Note: DiffLlama now has internal mel_mlp and mel_out_mlp, so we don't need separate projections
         self.diff_estimator = DiffLlama(
+            mel_dim=mel_dim,
             hidden_size=hidden_size,
             num_heads=num_heads,
             num_layers=num_layers,
         )
+        self.sigma = sigma
 
-        self.reset_parameters()
 
     def reset_parameters(self):
         def _reset_parameters(m):
@@ -85,13 +82,28 @@ class SemanticToMelFM(nn.Module):
                     nn.init.normal_(m.q_proj_weight, std=0.02)
                     nn.init.normal_(m.k_proj_weight, std=0.02)
                     nn.init.normal_(m.v_proj_weight, std=0.02)
+
                 if m.in_proj_bias is not None:
                     nn.init.constant_(m.in_proj_bias, 0.0)
                     nn.init.constant_(m.out_proj.bias, 0.0)
+                if m.bias_k is not None:
+                    nn.init.xavier_normal_(m.bias_k)
+                if m.bias_v is not None:
+                    nn.init.xavier_normal_(m.bias_v)
+
+            elif (
+                isinstance(m, nn.Conv1d)
+                or isinstance(m, nn.ConvTranspose1d)
+                or isinstance(m, nn.Conv2d)
+                or isinstance(m, nn.ConvTranspose2d)
+            ):
+                m.weight.data.normal_(0.0, 0.02)
+
             elif isinstance(m, nn.Linear):
                 m.weight.data.normal_(mean=0.0, std=0.02)
                 if m.bias is not None:
                     m.bias.data.zero_()
+
             elif isinstance(m, nn.Embedding):
                 m.weight.data.normal_(mean=0.0, std=0.02)
                 if m.padding_idx is not None:
@@ -175,14 +187,8 @@ class SemanticToMelFM(nn.Module):
                 torch.zeros_like(prompt_len),
             ).to(cond.device).unsqueeze(-1).unsqueeze(-1)
 
-        # Project mel to hidden space
-        xt_hidden = self.mel_in_proj(xt)  # (B, T, hidden_size)
-
-        # Run through flow estimator
-        hidden_out = self.diff_estimator(xt_hidden, new_t, cond, x_mask)  # (B, T, hidden_size)
-
-        # Project back to mel space
-        flow_pred = self.mel_out_proj(hidden_out)  # (B, T, mel_dim)
+        # Run through flow estimator (DiffLlama now handles mel projection internally)
+        flow_pred = self.diff_estimator(xt, new_t, cond, x_mask)  # (B, T, mel_dim)
 
         # Final mask for loss
         final_mask = mask * x_mask[..., None]  # (B, T, 1)
@@ -257,23 +263,19 @@ class SemanticToMelFM(nn.Module):
         for i in range(n_timesteps):
             # Concatenate prompt and current estimate
             xt_input = torch.cat([prompt_mel, xt], dim=1)  # (B, T_total, mel_dim)
-            xt_hidden = self.mel_in_proj(xt_input)  # (B, T_total, hidden_size)
 
             t = (0 + (i + 0.5) * h) * torch.ones(z.shape[0], dtype=z.dtype, device=z.device)
 
-            # Predict flow
-            hidden_out = self.diff_estimator(xt_hidden, t, cond, xt_mask)
-            flow_pred = self.mel_out_proj(hidden_out)
+            # Predict flow (DiffLlama now handles mel projection internally)
+            flow_pred = self.diff_estimator(xt_input, t, cond, xt_mask)
             flow_pred = flow_pred[:, prompt_len:, :]  # Only target frames
 
             # Classifier-free guidance
             if cfg > 0:
                 # Unconditional prediction
-                xt_target_hidden = self.mel_in_proj(xt)
-                uncond_hidden = self.diff_estimator(
-                    xt_target_hidden, t, torch.zeros_like(cond)[:, :xt.shape[1], :], x_mask
+                uncond_flow = self.diff_estimator(
+                    xt, t, torch.zeros_like(cond)[:, :xt.shape[1], :], x_mask
                 )
-                uncond_flow = self.mel_out_proj(uncond_hidden)
 
                 # Apply CFG
                 pos_flow_std = flow_pred.std()

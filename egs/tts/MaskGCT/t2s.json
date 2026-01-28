@@ -50,7 +50,7 @@
         "use_dynamic_batchsize": true,
         "max_tokens": 16000000,
         "max_sentences": 200,
-        "lr_warmup_steps": 5000,
+        "lr_warmup_steps": 10000,
         "lr_scheduler": "inverse_sqrt",
         "num_train_steps": 100000,
         "adam": {

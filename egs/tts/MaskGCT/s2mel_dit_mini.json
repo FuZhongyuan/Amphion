@@ -48,7 +48,7 @@
             "vocos_dim": 384,
             "vocos_intermediate_dim": 2048,
             "vocos_num_layers": 12,
-            "pretrained_path": "ckpts/maskgct_mini/semantic_codec_mini_150k/checkpoint/epoch-0060_step-0150000_loss-44.534714",
+            "pretrained_path": "ckpts/maskgct_mini/semantic_codec_mini_160k_128/checkpoint/epoch-0170_step-0160000_loss-43.150742",
             "representation_stat_mean_var_path": "models/tts/maskgct/ckpt/wav2vec2bert_stats.pt"
         },
         "representation_type": "w2v-bert-2.0",
@@ -60,8 +60,8 @@
         "max_epoch": 0,
         "use_dynamic_batchsize": true,
         "max_tokens": 8000,
-        "max_sentences": 50,
-        "lr_warmup_steps": 5000,
+        "max_sentences": 100,
+        "lr_warmup_steps": 10000,
         "lr_scheduler": "inverse_sqrt",
         "num_train_steps": 100000,
         "adam": {

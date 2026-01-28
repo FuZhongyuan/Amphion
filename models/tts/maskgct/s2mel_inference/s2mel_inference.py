@@ -15,6 +15,7 @@ It simulates the training logic by:
 2. Using the S2Mel model to convert semantic tokens to mel spectrograms
 3. Using HiFi-GAN vocoder to generate audio from mel spectrograms
 4. Saving both mel spectrograms and audio for evaluation
+5. Visualizing mel spectrograms as images
 """
 
 import argparse
@@ -26,12 +27,159 @@ import numpy as np
 import torch
 import soundfile as sf
 import librosa
+import matplotlib
+matplotlib.use('Agg')  # Use non-interactive backend
+import matplotlib.pyplot as plt
 
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))))
 
 from utils.util import load_config
 from utils.mel import extract_mel_features
+
+
+def plot_mel_spectrogram(mel_spec, title="Mel Spectrogram", save_path=None, figsize=(12, 6)):
+    """
+    Plot mel spectrogram and save as image.
+    
+    Args:
+        mel_spec: Mel spectrogram array (T, mel_dim) or (1, T, mel_dim)
+        title: Plot title
+        save_path: Path to save the image
+        figsize: Figure size (width, height)
+    """
+    # Handle different input shapes
+    if len(mel_spec.shape) == 3:
+        mel_spec = mel_spec.squeeze(0)  # Remove batch dimension (B, T, mel_dim) -> (T, mel_dim)
+    
+    # Ensure shape is (mel_dim, T) for plotting
+    # mel_spec is typically (T, mel_dim), need to transpose to (mel_dim, T)
+    if len(mel_spec.shape) == 2:
+        # If second dimension is larger, assume it's (T, mel_dim) format
+        if mel_spec.shape[1] > mel_spec.shape[0] or mel_spec.shape[1] >= 50:
+            mel_spec = mel_spec.T
+    
+    plt.figure(figsize=figsize)
+    plt.imshow(mel_spec, aspect='auto', origin='lower', interpolation='none', cmap='viridis')
+    plt.colorbar(format='%+2.0f')
+    plt.title(title)
+    plt.xlabel('Time Frame')
+    plt.ylabel('Mel Frequency Bin')
+    plt.tight_layout()
+    
+    if save_path:
+        plt.savefig(save_path, dpi=150, bbox_inches='tight')
+        print(f"Saved mel spectrogram plot: {save_path}")
+    
+    plt.close()
+
+
+def plot_mel_comparison(mel_list, titles, save_path=None, figsize=(18, 10)):
+    """
+    Plot multiple mel spectrograms for comparison.
+    
+    Args:
+        mel_list: List of mel spectrogram arrays
+        titles: List of titles for each mel spectrogram
+        save_path: Path to save the image
+        figsize: Figure size (width, height)
+    """
+    n_mels = len(mel_list)
+    fig, axes = plt.subplots(n_mels, 1, figsize=figsize)
+    
+    if n_mels == 1:
+        axes = [axes]
+    
+    for idx, (mel_spec, title) in enumerate(zip(mel_list, titles)):
+        # Handle different input shapes
+        if len(mel_spec.shape) == 3:
+            mel_spec = mel_spec.squeeze(0)  # (B, T, mel_dim) -> (T, mel_dim)
+        
+        # Ensure shape is (mel_dim, T) for plotting
+        if len(mel_spec.shape) == 2:
+            # If second dimension is larger, assume it's (T, mel_dim) format
+            if mel_spec.shape[1] > mel_spec.shape[0] or mel_spec.shape[1] >= 50:
+                mel_spec = mel_spec.T
+        
+        im = axes[idx].imshow(mel_spec, aspect='auto', origin='lower', 
+                             interpolation='none', cmap='viridis')
+        axes[idx].set_title(title)
+        axes[idx].set_xlabel('Time Frame')
+        axes[idx].set_ylabel('Mel Bin')
+        plt.colorbar(im, ax=axes[idx], format='%+2.0f')
+    
+    plt.tight_layout()
+    
+    if save_path:
+        plt.savefig(save_path, dpi=150, bbox_inches='tight')
+        print(f"Saved mel comparison plot: {save_path}")
+    
+    plt.close()
+
+
+def plot_mel_difference(mel_pred, mel_gt, save_path=None, figsize=(18, 8)):
+    """
+    Plot predicted mel, ground truth mel, and their difference.
+    
+    Args:
+        mel_pred: Predicted mel spectrogram
+        mel_gt: Ground truth mel spectrogram
+        save_path: Path to save the image
+        figsize: Figure size (width, height)
+    """
+    # Handle different input shapes
+    if len(mel_pred.shape) == 3:
+        mel_pred = mel_pred.squeeze(0)  # (B, T, mel_dim) -> (T, mel_dim)
+    if len(mel_gt.shape) == 3:
+        mel_gt = mel_gt.squeeze(0)  # (B, T, mel_dim) -> (T, mel_dim)
+    
+    # Ensure shape is (mel_dim, T) for plotting
+    if len(mel_pred.shape) == 2:
+        if mel_pred.shape[1] > mel_pred.shape[0] or mel_pred.shape[1] >= 50:
+            mel_pred = mel_pred.T
+    if len(mel_gt.shape) == 2:
+        if mel_gt.shape[1] > mel_gt.shape[0] or mel_gt.shape[1] >= 50:
+            mel_gt = mel_gt.T
+    
+    # Ensure same shape for difference calculation
+    min_t = min(mel_pred.shape[1], mel_gt.shape[1])
+    min_mel = min(mel_pred.shape[0], mel_gt.shape[0])
+    mel_pred_aligned = mel_pred[:min_mel, :min_t]
+    mel_gt_aligned = mel_gt[:min_mel, :min_t]
+    
+    mel_diff = mel_pred_aligned - mel_gt_aligned
+    
+    fig, axes = plt.subplots(3, 1, figsize=figsize)
+    
+    # Plot predicted
+    im1 = axes[0].imshow(mel_pred, aspect='auto', origin='lower', 
+                        interpolation='none', cmap='viridis')
+    axes[0].set_title('Generated Mel Spectrogram')
+    axes[0].set_ylabel('Mel Bin')
+    plt.colorbar(im1, ax=axes[0], format='%+2.0f')
+    
+    # Plot ground truth
+    im2 = axes[1].imshow(mel_gt, aspect='auto', origin='lower', 
+                        interpolation='none', cmap='viridis')
+    axes[1].set_title('Ground Truth Mel Spectrogram')
+    axes[1].set_ylabel('Mel Bin')
+    plt.colorbar(im2, ax=axes[1], format='%+2.0f')
+    
+    # Plot difference
+    im3 = axes[2].imshow(mel_diff, aspect='auto', origin='lower', 
+                        interpolation='none', cmap='RdBu_r', vmin=-2, vmax=2)
+    axes[2].set_title('Difference (Generated - Ground Truth)')
+    axes[2].set_xlabel('Time Frame')
+    axes[2].set_ylabel('Mel Bin')
+    plt.colorbar(im3, ax=axes[2], format='%+2.1f')
+    
+    plt.tight_layout()
+    
+    if save_path:
+        plt.savefig(save_path, dpi=150, bbox_inches='tight')
+        print(f"Saved mel difference plot: {save_path}")
+    
+    plt.close()
 
 
 def load_checkpoint(model, ckpt_path, device):
@@ -419,7 +567,7 @@ class S2MelInferencePipeline:
         }
 
 
-def save_results(results, output_dir, sample_name, sample_rate):
+def save_results(results, output_dir, sample_name, sample_rate, visualize=True):
     """Save inference results to files."""
     os.makedirs(output_dir, exist_ok=True)
 
@@ -449,6 +597,58 @@ def save_results(results, output_dir, sample_name, sample_rate):
         gt_mel_path = os.path.join(output_dir, f"{sample_name}_gt_mel.npy")
         np.save(gt_mel_path, results["gt_mel"])
         print(f"Saved ground truth mel: {gt_mel_path}")
+
+    # Visualize mel spectrograms
+    if visualize:
+        print("\nGenerating mel spectrogram visualizations...")
+        
+        # Plot individual mel spectrograms
+        generated_mel_img_path = os.path.join(output_dir, f"{sample_name}_generated_mel.png")
+        plot_mel_spectrogram(
+            results["generated_mel"],
+            title="Generated Mel Spectrogram",
+            save_path=generated_mel_img_path
+        )
+        
+        if "gt_mel" in results:
+            gt_mel_img_path = os.path.join(output_dir, f"{sample_name}_gt_mel.png")
+            plot_mel_spectrogram(
+                results["gt_mel"],
+                title="Ground Truth Mel Spectrogram",
+                save_path=gt_mel_img_path
+            )
+        
+        if "prompt_mel" in results:
+            prompt_mel_img_path = os.path.join(output_dir, f"{sample_name}_prompt_mel.png")
+            plot_mel_spectrogram(
+                results["prompt_mel"],
+                title="Prompt Mel Spectrogram",
+                save_path=prompt_mel_img_path
+            )
+        
+        # Plot comparison
+        if "gt_mel" in results:
+            comparison_path = os.path.join(output_dir, f"{sample_name}_comparison.png")
+            mel_list = [results["generated_mel"], results["gt_mel"]]
+            titles = ["Generated Mel Spectrogram", "Ground Truth Mel Spectrogram"]
+            
+            if "prompt_mel" in results:
+                mel_list.insert(0, results["prompt_mel"])
+                titles.insert(0, "Prompt Mel Spectrogram")
+            
+            plot_mel_comparison(
+                mel_list,
+                titles,
+                save_path=comparison_path
+            )
+            
+            # Plot difference
+            diff_path = os.path.join(output_dir, f"{sample_name}_difference.png")
+            plot_mel_difference(
+                results["generated_mel"],
+                results["gt_mel"],
+                save_path=diff_path
+            )
 
     # Save metadata
     metadata = {
@@ -541,6 +741,11 @@ def main():
         type=str,
         default="cuda:0",
         help="Device to use",
+    )
+    parser.add_argument(
+        "--no_visualize",
+        action="store_true",
+        help="Disable mel spectrogram visualization",
     )
 
     args = parser.parse_args()
@@ -654,6 +859,7 @@ def main():
                 args.output_dir,
                 sample_name,
                 cfg.preprocess.sample_rate,
+                visualize=not args.no_visualize,
             )
         except Exception as e:
             print(f"Error processing {wav_path}: {e}")

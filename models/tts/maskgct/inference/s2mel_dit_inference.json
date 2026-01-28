@@ -1,13 +1,15 @@
 {
-    "model_type": "S2MelFM",
+    "model_type": "S2MelDiT",
     "dataset": {
         "ljspeech": 1.0
     },
     "inference": {
         "t2s_n_timesteps": 60,
-        "s2mel_n_timesteps": 10,
+        "s2mel_n_timesteps": 50,
         "t2s_cfg": 1.0,
-        "s2mel_cfg": 1.0
+        "s2mel_cfg": 1.0,
+        "use_ddim": true,
+        "ddim_eta": 0.0
     },
     "preprocess": {
         "dataset_type": "ljspeech",
@@ -33,6 +35,16 @@
         "use_semantic_cache": true
     },
     "model": {
+        "semantic_codec": {
+            "codebook_size": 512,
+            "hidden_size": 1024,
+            "codebook_dim": 8,
+            "vocos_dim": 384,
+            "vocos_intermediate_dim": 2048,
+            "vocos_num_layers": 12,
+            "pretrained_path": "ckpts/maskgct_mini/semantic_codec_mini_160k_128/checkpoint/epoch-0170_step-0160000_loss-43.150742",
+            "representation_stat_mean_var_path": "models/tts/maskgct/ckpt/wav2vec2bert_stats.pt"
+        },
         "t2s_model": {
             "hidden_size": 384,
             "num_layers": 6,
@@ -48,26 +60,18 @@
             "min_mask_ratio": 0.1,
             "max_mask_ratio": 0.8
         },
-        "s2mel_fm": {
+        "s2mel_dit": {
             "mel_dim": 80,
-            "hidden_size": 1024,
+            "hidden_size": 768,
             "num_layers": 12,
             "num_heads": 8,
             "cfg_scale": 0.15,
             "cond_codebook_size": 512,
-            "sigma": 1e-5,
-            "time_scheduler": "cos",
+            "num_diffusion_steps": 1000,
+            "beta_start": 0.0001,
+            "beta_end": 0.02,
+            "beta_schedule": "linear",
             "gradient_checkpointing": false
-        },
-        "semantic_codec": {
-            "codebook_size": 512,
-            "hidden_size": 1024,
-            "codebook_dim": 8,
-            "vocos_dim": 384,
-            "vocos_intermediate_dim": 2048,
-            "vocos_num_layers": 12,
-            "pretrained_path": "ckpts/maskgct_mini/semantic_codec_mini_ljspeech/checkpoint/epoch-1466_step-0300000_loss-12.738006",
-            "representation_stat_mean_var_path": "models/tts/maskgct/ckpt/wav2vec2bert_stats.pt"
         },
         "hifigan": {
             "resblock": "1",
@@ -87,7 +91,7 @@
         "use_dynamic_batchsize": true,
         "max_tokens": 8000000,
         "max_sentences": 50,
-        "lr_warmup_steps": 5000,
+        "lr_warmup_steps": 10000,
         "lr_scheduler": "inverse_sqrt",
         "num_train_steps": 100000,
         "adam": {
