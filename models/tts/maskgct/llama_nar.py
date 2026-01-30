@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from transformers import LlamaConfig, LlamaForCausalLM, LlamaModel
+import flash_attn
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint as checkpoint
@@ -147,6 +148,7 @@ class DiffLlama(LlamaModel):
                         num_attention_heads=num_heads,
                         max_position_embeddings=4096,
                         intermediate_size=hidden_size * 4,
+                        attn_implementation="sdpa"
                     ),
                     layer_idx=i,
                 )
@@ -436,6 +438,7 @@ class DiffLlamaPrefix(LlamaModel):
                         num_attention_heads=num_heads,
                         max_position_embeddings=4096,
                         intermediate_size=hidden_size * 4,
+                        attn_implementation="sdpa"
                     ),
                     layer_idx=i,
                 )

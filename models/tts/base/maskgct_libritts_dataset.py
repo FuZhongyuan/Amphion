@@ -183,8 +183,8 @@ class MaskgctLibriTTSDataset(LibriTTSDataset):
 
     def load_cached_semantic_features(self, wav_path):
         """Load preprocessed semantic features from HDF5 cache if available."""
-        if not self.use_semantic_cache or not self.processed_dir:
-            return None
+        # if not self.use_semantic_cache or not self.processed_dir:
+        #     return None
 
         try:
             # Convert wav path to sample key
@@ -210,7 +210,7 @@ class MaskgctLibriTTSDataset(LibriTTSDataset):
             cached_data = {}
             
             # Load hidden states if available
-            if "hidden_states" in group:
+            if self.load_semantic_features and "hidden_states" in group:
                 # NOTE: cached features may be stored as float16; cast to float32 for training stability
                 cached_data["semantic_hidden_states"] = group["hidden_states"][:].astype(
                     np.float32, copy=False
